@@ -4,6 +4,7 @@
 // token is a stand-in. RemoteAuth (Cloudflare) implements the same interface with
 // a real email + signed-token verification — no UI change.
 import { load, save, remove, uid } from "./persist"
+import { claimHandle } from "./identity"
 
 export interface Session {
   email: string
@@ -26,11 +27,6 @@ interface Pending {
   email: string
   name: string
   token: string
-}
-
-export function handleFromEmail(email: string): string {
-  const local = email.split("@")[0] ?? "me"
-  return local.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "me"
 }
 
 export function createLocalAuth(): Auth {
@@ -57,7 +53,7 @@ export function createLocalAuth(): Auth {
     async signInWithToken(token) {
       const pending = load<Pending | null>(PENDING, null)
       if (pending !== null && pending.token === token) {
-        session = { email: pending.email, name: pending.name, handle: handleFromEmail(pending.email) }
+        session = { email: pending.email, name: pending.name, handle: claimHandle(pending.email) }
         save(SESSION, session)
         remove(PENDING)
         notify()

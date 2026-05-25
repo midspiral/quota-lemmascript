@@ -70,6 +70,18 @@ try {
   await page.getByRole("button", { name: "View public page" }).waitFor({ timeout: 8000 })
   await page.screenshot({ path: shot("manage-booked") })
   ok("editor reachable after booking")
+
+  step("handle uniqueness: a 2nd account with the same email local-part is disambiguated")
+  await page.getByRole("button", { name: "Sign out" }).click()
+  await page.getByRole("button", { name: "Send magic link" }).waitFor({ timeout: 8000 })
+  await page.getByPlaceholder("Your name").fill("Sam Two")
+  await page.getByPlaceholder("you@example.com").fill("sam@other.test") // local-part "sam" again
+  await page.getByRole("button", { name: "Send magic link" }).click()
+  await page.getByRole("link", { name: /Open magic link/ }).click()
+  await page.getByText("Your pages").waitFor({ timeout: 8000 })
+  const handleText = await page.getByText(/quota\.app\/sam/).innerText()
+  if (/sam-2/.test(handleText)) ok(`2nd account got a distinct handle (${handleText.trim()})`)
+  else fail(`2nd account handle not disambiguated: "${handleText.trim()}"`)
 } catch (e) {
   fail(`flow threw: ${e.message}`)
   await page.screenshot({ path: shot("error") }).catch(() => {})
