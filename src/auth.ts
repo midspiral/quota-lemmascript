@@ -34,9 +34,12 @@ export function handleFromEmail(email: string): string {
 export function createLocalAuth(): Auth {
   const subs = new Set<() => void>()
   const notify = (): void => subs.forEach((f) => f())
+  // Cache the session reference so getSnapshot is stable across renders
+  // (useSyncExternalStore loops if it returns a fresh object each call).
+  let session: Session | null = load<Session | null>(SESSION, null)
 
   return {
-    current: () => load<Session | null>(SESSION, null),
+    current: () => session,
     subscribe(fn) {
       subs.add(fn)
       return () => {
@@ -51,16 +54,20 @@ export function createLocalAuth(): Auth {
     },
     async signInWithToken(token) {
       const pending = load<Pending | null>(PENDING, null)
-      if (pending === null || pending.token !== token) {
-        throw new Error("This sign-in link is invalid or has already been used.")
+      if (pending !== null && pending.token === token) {
+        session = { email: pending.email, handle: handleFromEmail(pending.email) }
+        save(SESSION, session)
+        remove(PENDING)
+        notify()
+        return session
       }
-      const session: Session = { email: pending.email, handle: handleFromEmail(pending.email) }
-      save(SESSION, session)
-      remove(PENDING)
-      notify()
-      return session
+      // Idempotent: a re-presented/consumed link is fine if we're already signed in
+      // (e.g. React StrictMode double-invokes the sign-in effect in dev).
+      if (session !== null) return session
+      throw new Error("This sign-in link is invalid or has already been used.")
     },
     signOut() {
+      session = null
       remove(SESSION)
       notify()
     },

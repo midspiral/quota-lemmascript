@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "verify": "../LemmaScript/tools/check.sh dafny",
-    "test": "node test/smoke.ts"
+    "test": "node test/smoke.ts",
+    "test:browser": "node test/browser.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",
@@ -20,6 +21,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "playwright-core": "^1.60.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^6.0.3",
     "vite": "^7.2.0"

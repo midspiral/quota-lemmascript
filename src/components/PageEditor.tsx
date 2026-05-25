@@ -144,15 +144,18 @@ function EditorInner({ pageId, username, pagename }: { pageId: string; username:
           <div className="flex-1">
             <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New slot — e.g. Fri 8:00 PM" />
           </div>
-          <Input
-            className="w-20"
-            type="number"
-            min={0}
-            value={cap}
-            onChange={(e) => setCap(e.target.value)}
-            aria-label="capacity"
-          />
-          <Button type="submit">Add slot</Button>
+          <div className="w-20 shrink-0">
+            <Input
+              type="number"
+              min={0}
+              value={cap}
+              onChange={(e) => setCap(e.target.value)}
+              aria-label="capacity"
+            />
+          </div>
+          <Button type="submit" className="shrink-0">
+            Add slot
+          </Button>
         </form>
       </Card>
     </div>

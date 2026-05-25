@@ -76,20 +76,22 @@ export function NewPage({ session }: { session: Session }) {
             <span className="text-sm font-medium text-stone-700">Slots</span>
             {slots.map((s, i) => (
               <div key={i} className="flex items-center gap-2">
-                <Input
-                  className="flex-1"
-                  value={s.label}
-                  onChange={(e) => setSlot(i, { label: e.target.value })}
-                  placeholder={`Slot ${i + 1} — e.g. Mon 9:00 AM`}
-                />
-                <Input
-                  className="w-20"
-                  type="number"
-                  min={0}
-                  value={s.capacity}
-                  onChange={(e) => setSlot(i, { capacity: e.target.value })}
-                  aria-label="capacity"
-                />
+                <div className="flex-1">
+                  <Input
+                    value={s.label}
+                    onChange={(e) => setSlot(i, { label: e.target.value })}
+                    placeholder={`Slot ${i + 1} — e.g. Mon 9:00 AM`}
+                  />
+                </div>
+                <div className="w-20 shrink-0">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={s.capacity}
+                    onChange={(e) => setSlot(i, { capacity: e.target.value })}
+                    aria-label="capacity"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => removeSlot(i)}
