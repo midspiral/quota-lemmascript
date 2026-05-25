@@ -87,7 +87,7 @@ src/
   store.ts           ← PageStore interface + LocalStore (only importer of mutations)
   auth.ts            ← Auth interface + LocalAuth (faked magic link; session in localStorage)
   catalog.ts         ← local page registry: username/pagename ⟷ pageId, "my pages" (localStorage)
-  identity.ts        ← local people directory (email → name), to show booker names (localStorage)
+  identity.ts        ← accounts: people directory (email → name) + unique-handle registry (localStorage)
   useQuota.ts        ← hooks wrapping the verified QUERIES (no domain math in components)
   config.ts          ← LocalStore vs RemoteStore (VITE_REMOTE flag)
   router.tsx         ← tiny hash router (#/, #/new, #/:user/:page, #/:user/:page/manage)
@@ -176,6 +176,11 @@ the number on the cell is, by construction, the verified count.
   (so the same account can't double-book a slot, and "your bookings" falls out of `key ===
   email`). Names are PII kept in the shell directory, shown to the provider. Locally it's a
   single-device sandbox, so you can be both roles.
+- **Handles are unique.** A vanity `username` is **claimed per account** at sign-in — derived
+  from the email but disambiguated on collision (`sam`, `sam-2`, …) and persisted, so handle ↔
+  account is 1:1. That makes ownership-by-handle sound (you can only manage `your-handle/*`).
+  Page slugs are checked unique *within* a handle on creation (`pagenameTaken`). This mirrors the
+  Cloudflare D1 registry's `UNIQUE(username)` + `PRIMARY KEY(username, pagename)` (DESIGN.md §6).
 - **Why it already feels right**: because `book()` is fallible/async and the UI renders only
   verified outputs, the local app behaves exactly as the multi-device one will — minus real
   concurrency.
