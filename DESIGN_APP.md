@@ -50,12 +50,38 @@ export interface PageStore {
 `src/config.ts` picks the implementation from a build flag (`VITE_REMOTE`), exactly one branch
 in a `loadStore(pageId)` factory.
 
+**The same pattern for auth.** A real magic link needs a server (to email the link *and* to
+mint/verify a signed, expiring token) — neither exists locally — so any local magic link is a
+**simulation**. We hide that behind a second seam:
+
+```ts
+// src/auth.ts
+export interface Auth {
+  current(): Session | null
+  requestLink(email: string): Promise<{ devLink?: string }>  // Local: returns a link to show on-screen; Remote: emails it
+  signInWithToken(token: string): Promise<Session>
+  signOut(): void
+}
+```
+
+- **`LocalAuth`** (this increment): `requestLink` does **not** email — it returns a `devLink`
+  the sign-in screen renders as a clickable "📧 dev magic link → Sign in" affordance; the token
+  is a stand-in (no server secret to sign with). Session in `localStorage`. This makes the
+  sign-in screen, the provider/booker split, and the auth-gated routes **real locally**.
+- **`RemoteAuth`** (Cloudflare): same interface; `requestLink` hits the Worker, which emails a
+  real signed token, and `signInWithToken` verifies it. **The UI does not change** — only the
+  token's authenticity does.
+
+So locally you *do* sign in (with a faked link); the gated provider experience is genuine, and
+Cloudflare swaps only the trust.
+
 ## 2. Components
 
 ```
 src/
   domain.ts          ← verified core (unchanged; imported by store + hook)
   store.ts           ← PageStore interface + LocalStore (only importer of mutations)
+  auth.ts            ← Auth interface + LocalAuth (faked magic link; session in localStorage)
   catalog.ts         ← local page registry: username/pagename ⟷ pageId, "my pages" (localStorage)
   identity.ts        ← anonymous booker key + "my bookings" (bookingIds) (localStorage)
   useQuota.ts        ← hooks wrapping the verified QUERIES (no domain math in components)
@@ -66,7 +92,8 @@ src/
   components/
     BookingPage.tsx  ← PUBLIC airy single-column list (the centerpiece)
     SlotRow.tsx      ← one slot: label, capacity bar, “N left”, Book / booked / cancel
-    Console.tsx      ← provider home: your handle, your pages, “New page”
+    SignIn.tsx       ← provider sign-in (email → faked dev magic link → session)
+    Console.tsx      ← provider home (auth-gated): your handle, your pages, “New page”
     NewPage.tsx      ← create a page (title, username/pagename slug, initial slots)
     PageEditor.tsx   ← manage one page: add/close slots, set capacity, bookers, share link
     ui.tsx           ← small Tailwind atoms (Button, Card, Bar, Field)
@@ -119,9 +146,12 @@ the number on the cell is, by construction, the verified count.
   tracked per device in `localStorage`.
 - A page-level banner when `soldOut(page)`.
 
-**Provider console** — `#/` (your pages) and `#/:username/:pagename/manage`:
+**Provider console** — `#/` (your pages) and `#/:username/:pagename/manage`, **auth-gated**:
 
-- `Console`: your local handle + a list of your pages with quick stats (slots, total booked),
+- Unauthenticated, `#/` shows `SignIn`: enter email → a faked **dev magic link** appears
+  on-screen → clicking it establishes a session (`Auth` seam, §1). Real email + token
+  verification arrive with Cloudflare.
+- `Console` (signed in): your local handle + a list of your pages with quick stats (slots, total booked),
   and **New page**.
 - `NewPage`: title, a `username/pagename` slug (validated/normalized locally), and initial
   slots (label + capacity, default 1). Calls `catalog.createPage` → `initPage` + register.
@@ -152,7 +182,7 @@ What changes is confined to **infra modules**; `App`, `useQuota`, every componen
 | Per-page state | `LocalStore` + `localStorage` | `RemoteStore` (WebSocket) → **Durable Object per page**, applies the same `tryBook`/`cancel`/`replay` server-authoritatively |
 | `book()` outcome | computed locally | the **DO’s authoritative** accept/reject (pessimistic) — same return type |
 | Catalog / vanity URL | `catalog.ts` over `localStorage` | **D1 registry** (`username` unique, `pagename` unique per provider) → opaque `pageId` → `idFromName(pageId)` |
-| Provider auth | none (single-namespace sandbox) | **magic-link email**; gates only the management routes |
+| Provider auth | `LocalAuth` (faked dev magic link, `localStorage` session) | `RemoteAuth`: **real magic-link email** + signed-token verify; same `Auth` interface, gates only management routes |
 | Booker identity | `localStorage` key | same key, sent on connect |
 
 The store seam is *why* this is a one-line swap, and the **`bookCountOrderInvariant`** /
@@ -169,6 +199,8 @@ to a calm two-column on desktop.
 
 ## 7. Out of scope (this increment)
 
-Real auth, the D1 registry, WebSockets/Durable Objects, email, rate-limiting, tentative
+**Real** auth (genuine email + cryptographic token verification — local auth is a faked stub
+behind the `Auth` seam), the D1 registry, WebSockets/Durable Objects, rate-limiting, tentative
 holds/TTL, waitlist — all deferred to the Cloudflare stage or later (DESIGN.md §9/§11). This
-increment is a complete, elegant, **single-device** app over the verified core.
+increment is a complete, elegant, **single-device** app over the verified core, with the auth
+and store seams already in place so the Cloudflare swap touches no UI.
