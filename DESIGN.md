@@ -267,8 +267,8 @@ abuse/rate-limiting/identity spoofing.
 Grouped into families and sequenced into stages. We design the model now so every family is
 reachable; we prove them in order. Spec sketches use LemmaScript syntax (`forall(k, P)`,
 `\result`, no `\old`; each `//@ ensures` becomes a *separate* `_ensures` lemma, so functions
-are **pure recursive** and the kernel is **total**). **Stages 0, 0b, 1, 2 (Families A, B, C, G,
-D-core) are implemented and verified** (`src/domain.ts`, 53 Dafny VCs, 0 errors); those specs below are the
+are **pure recursive** and the kernel is **total**). **Stages 0, 0b, 1, 2, 3 (Families A, B, C, G,
+D-core, F) are implemented and verified** (`src/domain.ts`, 67 Dafny VCs, 0 errors); those specs below are the
 real ones. The remaining stages are _planned_ — their sketches are the intended specs, pinned
 during implementation.
 
@@ -480,7 +480,8 @@ function closeSlot(p: Page, idx: number): Page
 | **1 — provider mutations** | `initPage`/`addSlot`/`setCapacity`/`closeSlot` preserve `Inv`; the "can't lower capacity below booked" obligation. Also **strengthened the invariant with A3** (no phantom bookings, needed by `addSlot`) and re-proved `tryBook`/`cancel` preserve it. | A, G | ✅ **verified** (47 VCs, 0 errors) |
 | **2 — op model + replay** | `Op`/`applyOp`/`replay` (total) + `applyOpPreservesInv`/`replayPreservesInv` (every reachable state well-formed); `confirmedCountConcat` count homomorphism + `confirmedCountComm` batch commutativity. | D (core) | ✅ **verified** (53 VCs, 0 errors) |
 | **2b — order boundary** | `noContentionIsOrderFree` (under-subscription ⇒ order-free, the Quorum-regime bridge). Full permutation invariance blocked on `multiset` in specs. | D | _planned_ |
-| **3 — export + queries** | `replayRoundTrip` (E1), query-over-export soundness (E2), canonical encoding (E4); `bookersOf`/`availableSlots`/`soldOut`. | E, F | _planned_ |
+| **3 — queries** | `bookersOf` (length === count), `availableSlots` (per-slot room mask, exact), `soldOut` (iff no slot has room). | F | ✅ **verified** (67 VCs, 0 errors) |
+| **3b — export faithfulness** | `replayRoundTrip` (E1, needs op-reconstruction from a materialized page), query-over-export soundness (E2), canonical encoding (E4). | E | _planned_ |
 | **4 — richness (optional)** | Waitlist (rejected → FIFO queue; cancel promotes the head, capacity still safe) — adds promotion semantics + FIFO/served-≤-capacity proofs. Per-slot booking windows (open/close times) as shell + a verified "closed ⇒ no accept" guard. | (extends B/C) | _deferred_ |
 
 Each stage is shippable; the safety core is trustworthy after Stage 0, with the proof surface

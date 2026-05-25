@@ -431,3 +431,63 @@ export function confirmedCountComm(xs: Booking[], ys: Booking[], idx: number): b
   //@ ensures confirmedCount(xs.concat(ys), idx) === confirmedCount(ys.concat(xs), idx)
   return true
 }
+
+// ── Queries (Stage 3 / Family F) ──────────────────────────────
+//
+// The "trustworthy" answers the booking pages and provider console render. Each
+// is characterized exactly against the verified count, so a tooltip or badge can
+// never disagree with the number that drives the booking decision.
+
+// The confirmed bookings holding slot `idx`, by construction the holds-filter of
+// the log. Its length provably equals the count, so the provider's "3 booked: …"
+// list can never disagree with the cell's number.
+export function confirmedBookers(bs: Booking[], idx: number): Booking[] {
+  //@ verify
+  //@ decreases bs.length
+  //@ ensures \result.length === confirmedCount(bs, idx)
+  if (bs.length === 0) return []
+  const rest = confirmedBookers(bs.slice(1), idx)
+  return holds(bs[0], idx) ? [bs[0], ...rest] : rest
+}
+
+export function bookersOf(p: Page, idx: number): Booking[] {
+  //@ verify
+  //@ ensures \result.length === confirmedCount(p.bookings, idx)
+  return confirmedBookers(p.bookings, idx)
+}
+
+// Per-slot availability mask, characterized exactly: entry j is `hasRoom(p, j)`.
+export function availableUpto(p: Page, k: number): boolean[] {
+  //@ verify
+  //@ requires 0 <= k && k <= p.slots.length
+  //@ decreases k
+  //@ ensures \result.length === k
+  //@ ensures forall(j, 0 <= j && j < k ==> \result[j] === hasRoom(p, j))
+  if (k === 0) return []
+  const prev = availableUpto(p, k - 1)
+  return [...prev, hasRoom(p, k - 1)]
+}
+
+export function availableSlots(p: Page): boolean[] {
+  //@ verify
+  //@ ensures \result.length === p.slots.length
+  //@ ensures forall(j, 0 <= j && j < p.slots.length ==> \result[j] === hasRoom(p, j))
+  return availableUpto(p, p.slots.length)
+}
+
+// "Is the whole page sold out?" — true iff no slot has room.
+export function noneAvailUpto(p: Page, k: number): boolean {
+  //@ verify
+  //@ requires 0 <= k && k <= p.slots.length
+  //@ decreases k
+  //@ ensures \result === forall(j, 0 <= j && j < k ==> !hasRoom(p, j))
+  if (k === 0) return true
+  if (hasRoom(p, k - 1)) return false
+  return noneAvailUpto(p, k - 1)
+}
+
+export function soldOut(p: Page): boolean {
+  //@ verify
+  //@ ensures \result === forall(j, 0 <= j && j < p.slots.length ==> !hasRoom(p, j))
+  return noneAvailUpto(p, p.slots.length)
+}

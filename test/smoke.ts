@@ -3,7 +3,7 @@
 import {
   tryBook, cancel, remaining, wellFormed, confirmedCount, hasRoom,
   initPage, addSlot, setCapacity, closeSlot, capacityAt,
-  replay, type Page, type Op,
+  replay, bookersOf, availableSlots, soldOut, type Page, type Op,
 } from "../src/domain.ts"
 
 let failures = 0
@@ -109,6 +109,26 @@ check(confirmedCount(rp.bookings, 0) === 0, "winner cancelled -> slot free again
 // Re-running the same log over the same start is deterministic (audit/export).
 const rp2 = replay(base, log)
 check(confirmedCount(rp2.bookings, 0) === confirmedCount(rp.bookings, 0), "replay is deterministic")
+
+// ── Queries (Stage 3) ─────────────────────────────────────────
+
+// Two slots, capacities [2, 1]; fill slot 1, leave room in slot 0.
+let q = initPage("q1", "Queries", [{ label: "A", capacity: 2 }, { label: "B", capacity: 1 }])
+q = tryBook(q, 0, "q-a1", "p1", 1).page
+q = tryBook(q, 1, "q-b1", "p2", 2).page
+
+// bookersOf length matches the count exactly (the provider's "who's booked" list).
+check(bookersOf(q, 0).length === confirmedCount(q.bookings, 0), "bookersOf length == count (slot 0)")
+check(bookersOf(q, 1).length === 1 && bookersOf(q, 1)[0].key === "p2", "bookersOf returns the holder")
+
+// availableSlots is the per-slot room mask; soldOut iff none has room.
+check(availableSlots(q).length === 2 && availableSlots(q)[0] === true && availableSlots(q)[1] === false,
+  "availableSlots mask matches hasRoom per slot")
+check(soldOut(q) === false, "not sold out while slot 0 has room")
+
+// Fill the last seat of slot 0 -> whole page sold out.
+q = tryBook(q, 0, "q-a2", "p3", 3).page
+check(soldOut(q) === true, "sold out once every slot is full")
 
 if (failures === 0) {
   console.log("\nAll smoke checks passed.")

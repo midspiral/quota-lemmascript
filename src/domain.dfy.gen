@@ -458,3 +458,87 @@ lemma confirmedCountComm_ensures(xs: seq<Booking>, ys: seq<Booking>, idx: int)
   ensures (confirmedCount((xs + ys), idx) == confirmedCount((ys + xs), idx))
 {
 }
+
+function confirmedBookers(bs: seq<Booking>, idx: int): seq<Booking>
+  decreases |bs|
+{
+  if (|bs| == 0) then
+    []
+  else
+    var rest := confirmedBookers(bs[1..], idx);
+    if holds(bs[0], idx) then
+      ([bs[0]] + rest)
+    else
+      rest
+}
+
+lemma confirmedBookers_ensures(bs: seq<Booking>, idx: int)
+  ensures (|confirmedBookers(bs, idx)| == confirmedCount(bs, idx))
+{
+}
+
+function bookersOf(p: Page, idx: int): seq<Booking>
+{
+  confirmedBookers(p.bookings, idx)
+}
+
+lemma bookersOf_ensures(p: Page, idx: int)
+  ensures (|bookersOf(p, idx)| == confirmedCount(p.bookings, idx))
+{
+}
+
+function availableUpto(p: Page, k: int): seq<bool>
+  requires (0 <= k)
+  requires (k <= |p.slots|)
+  decreases k
+{
+  if (k == 0) then
+    []
+  else
+    var prev := availableUpto(p, (k - 1));
+    (prev + [hasRoom(p, (k - 1))])
+}
+
+lemma availableUpto_ensures(p: Page, k: int)
+  requires (0 <= k)
+  requires (k <= |p.slots|)
+  ensures (|availableUpto(p, k)| == k)
+  ensures forall j: int :: ((0 <= j) ==> (j < k) ==> (availableUpto(p, k)[j] == hasRoom(p, j)))
+{
+}
+
+function availableSlots(p: Page): seq<bool>
+{
+  availableUpto(p, |p.slots|)
+}
+
+lemma availableSlots_ensures(p: Page)
+  ensures (|availableSlots(p)| == |p.slots|)
+  ensures forall j: int :: ((0 <= j) ==> (j < |p.slots|) ==> (availableSlots(p)[j] == hasRoom(p, j)))
+{
+}
+
+function noneAvailUpto(p: Page, k: int): bool
+  requires (0 <= k)
+  requires (k <= |p.slots|)
+  decreases k
+{
+  ((k == 0) || (if hasRoom(p, (k - 1)) then false else noneAvailUpto(p, (k - 1))))
+}
+
+lemma noneAvailUpto_ensures(p: Page, k: int)
+  requires (0 <= k)
+  requires (k <= |p.slots|)
+  ensures (noneAvailUpto(p, k) == forall j: int :: ((0 <= j) ==> (j < k) ==> !(hasRoom(p, j))))
+{
+}
+
+function soldOut(p: Page): bool
+{
+  noneAvailUpto(p, |p.slots|)
+}
+
+lemma soldOut_ensures(p: Page)
+  ensures (soldOut(p) == forall j: int :: ((0 <= j) ==> (j < |p.slots|) ==> !(hasRoom(p, j))))
+{
+}
