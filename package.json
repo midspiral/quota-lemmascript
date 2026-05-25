@@ -1,0 +1,14 @@
+{
+  "name": "quota-lemmascript",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "verify": "../LemmaScript/tools/check.sh dafny",
+    "test": "node test/smoke.ts"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}
