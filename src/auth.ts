@@ -7,13 +7,14 @@ import { load, save, remove, uid } from "./persist"
 
 export interface Session {
   email: string
+  name: string
   handle: string // public username used in vanity URLs (derived from email, locally)
 }
 
 export interface Auth {
   current(): Session | null
   subscribe(fn: () => void): () => void
-  requestLink(email: string): Promise<{ devLink: string }>
+  requestLink(email: string, name: string): Promise<{ devLink: string }>
   signInWithToken(token: string): Promise<Session>
   signOut(): void
 }
@@ -23,6 +24,7 @@ const PENDING = "quota:pending-auth"
 
 interface Pending {
   email: string
+  name: string
   token: string
 }
 
@@ -46,16 +48,16 @@ export function createLocalAuth(): Auth {
         subs.delete(fn)
       }
     },
-    async requestLink(email) {
+    async requestLink(email, name) {
       const token = uid()
-      save<Pending>(PENDING, { email, token })
+      save<Pending>(PENDING, { email, name, token })
       // In production this link is emailed; locally we surface it so you can click it.
       return { devLink: `#/auth?token=${token}` }
     },
     async signInWithToken(token) {
       const pending = load<Pending | null>(PENDING, null)
       if (pending !== null && pending.token === token) {
-        session = { email: pending.email, handle: handleFromEmail(pending.email) }
+        session = { email: pending.email, name: pending.name, handle: handleFromEmail(pending.email) }
         save(SESSION, session)
         remove(PENDING)
         notify()

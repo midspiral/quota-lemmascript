@@ -1,45 +1,47 @@
 import { useMemo, useState } from "react"
 import { resolve } from "../catalog"
-import { loadStore } from "../config"
-import { usePage } from "../useQuota"
-import { myKey, myBookings, rememberBooking, forgetBooking } from "../identity"
+import { loadStore, auth } from "../config"
+import { usePage, useSession } from "../useQuota"
 import { SlotRow } from "./SlotRow"
+import { SignIn } from "./SignIn"
 import { NotFound } from "./NotFound"
 import { Card } from "./ui"
 
-// Public, no-login booking page. Resolves the vanity URL to a pageId, then books
-// pessimistically: each Book awaits the store's authoritative outcome.
+// Public booking page. Availability is viewable by anyone; booking requires an
+// account (one-click once signed in — identity comes from the session, so no
+// per-booking form). Signing in returns here (returnTo).
 export function BookingPage({ username, pagename }: { username: string; pagename: string }) {
   const ref = useMemo(() => resolve(username, pagename), [username, pagename])
   if (ref === null) return <NotFound message={`No page at ${username}/${pagename}.`} />
-  return <BookingInner pageId={ref.pageId} />
+  return <BookingInner pageId={ref.pageId} username={username} pagename={pagename} />
 }
 
-function BookingInner({ pageId }: { pageId: string }) {
+function BookingInner({ pageId, username, pagename }: { pageId: string; username: string; pagename: string }) {
   const store = useMemo(() => loadStore(pageId), [pageId])
   const q = usePage(store)
-  const key = myKey()
+  const session = useSession(auth)
   const [busy, setBusy] = useState<number | null>(null)
   const [notes, setNotes] = useState<Record<number, string>>({})
 
-  const mineIds = new Set(myBookings(pageId))
+  const myEmail = session?.email ?? null
   const myBookingAt = (i: number) =>
-    q.page.bookings.find((b) => mineIds.has(b.id) && b.slotIdx === i && b.status === "confirmed")
+    myEmail === null
+      ? undefined
+      : q.page.bookings.find((b) => b.key === myEmail && b.slotIdx === i && b.status === "confirmed")
 
   async function book(i: number): Promise<void> {
+    if (session === null) return
     setBusy(i)
     setNotes((n) => ({ ...n, [i]: "" }))
-    const { outcome, bookingId } = await q.book(i, key)
-    if (outcome === "confirmed") rememberBooking(pageId, bookingId)
-    else if (outcome === "full") setNotes((n) => ({ ...n, [i]: "Sorry — that just filled up." }))
-    else setNotes((n) => ({ ...n, [i]: "You already have this slot." }))
+    const { outcome } = await q.book(i, session.email)
+    if (outcome === "full") setNotes((n) => ({ ...n, [i]: "Sorry — that just filled up." }))
+    else if (outcome === "duplicate") setNotes((n) => ({ ...n, [i]: "You already have this slot." }))
     setBusy(null)
   }
 
   async function cancel(i: number, bookingId: string): Promise<void> {
     setBusy(i)
     await q.cancel(bookingId)
-    forgetBooking(pageId, bookingId)
     setBusy(null)
   }
 
@@ -66,6 +68,7 @@ function BookingInner({ pageId }: { pageId: string }) {
                   remaining={q.remainingOf(i)}
                   mine={mineB !== undefined}
                   busy={busy === i}
+                  interactive={session !== null}
                   note={notes[i] !== undefined && notes[i] !== "" ? notes[i] : undefined}
                   onBook={() => void book(i)}
                   onCancel={() => {
@@ -76,6 +79,15 @@ function BookingInner({ pageId }: { pageId: string }) {
             })}
           </div>
         </Card>
+      )}
+
+      {session === null && q.page.slots.length > 0 && (
+        <SignIn
+          auth={auth}
+          returnTo={`/${username}/${pagename}`}
+          title="Sign in to book"
+          subtitle="Booking takes one click once you're signed in."
+        />
       )}
     </div>
   )

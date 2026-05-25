@@ -1,44 +1,22 @@
-// Anonymous booker identity (no login) + "your bookings" per device, so a refresh
-// doesn't double-book and you can cancel your own bookings. The same key is sent
-// on connect in the Cloudflare version.
-import { load, save, uid } from "./persist"
+// A local "who's who" directory: email → name, so the provider can show booker
+// names. Bookers are now signed-in accounts, so their identity is their session;
+// the verified core still only stores the (now-email) key, and names live here in
+// the shell. Cloudflare keeps this server-side, readable only by the provider.
+import { load, save } from "./persist"
 
-const ME = "quota:me"
+const PEOPLE = "quota:people"
 
-interface Me {
-  key: string
-  bookings: Record<string, string[]> // pageId -> bookingIds
-}
+type People = Record<string, string> // email -> name
 
-function me(): Me {
-  return load<Me>(ME, { key: "", bookings: {} })
-}
-
-export function myKey(): string {
-  const m = me()
-  if (m.key === "") {
-    m.key = uid()
-    save(ME, m)
-  }
-  return m.key
-}
-
-export function myBookings(pageId: string): string[] {
-  return me().bookings[pageId] ?? []
-}
-
-export function rememberBooking(pageId: string, bookingId: string): void {
-  const m = me()
-  const list = m.bookings[pageId] ?? []
-  if (!list.includes(bookingId)) {
-    m.bookings[pageId] = [...list, bookingId]
-    save(ME, m)
+export function rememberPerson(email: string, name: string): void {
+  const people = load<People>(PEOPLE, {})
+  if (people[email] !== name) {
+    people[email] = name
+    save(PEOPLE, people)
   }
 }
 
-export function forgetBooking(pageId: string, bookingId: string): void {
-  const m = me()
-  const list = m.bookings[pageId] ?? []
-  m.bookings[pageId] = list.filter((b) => b !== bookingId)
-  save(ME, m)
+export function nameFor(email: string): string {
+  const people = load<People>(PEOPLE, {})
+  return people[email] ?? email
 }

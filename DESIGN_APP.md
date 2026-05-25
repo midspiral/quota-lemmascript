@@ -87,7 +87,7 @@ src/
   store.ts           ← PageStore interface + LocalStore (only importer of mutations)
   auth.ts            ← Auth interface + LocalAuth (faked magic link; session in localStorage)
   catalog.ts         ← local page registry: username/pagename ⟷ pageId, "my pages" (localStorage)
-  identity.ts        ← anonymous booker key + "my bookings" (bookingIds) (localStorage)
+  identity.ts        ← local people directory (email → name), to show booker names (localStorage)
   useQuota.ts        ← hooks wrapping the verified QUERIES (no domain math in components)
   config.ts          ← LocalStore vs RemoteStore (VITE_REMOTE flag)
   router.tsx         ← tiny hash router (#/, #/new, #/:user/:page, #/:user/:page/manage)
@@ -142,12 +142,14 @@ the number on the cell is, by construction, the verified count.
               ▓▓▓▓▓░░░░░         [ Book ]
 ```
 
-- No login. Each row: label, a capacity bar (`confirmed / capacity`), “N left” or **full**, and
-  an action. **Book** awaits `store.book(i, myKey)` and reflects the authoritative outcome
-  inline: *pending…* → ✓ booked / “sold out — try another” / “already yours”. Multi-slot is
-  allowed, so you can book several rows.
-- A booker who holds a row sees **Cancel** (uses the stored `bookingId`). “Your bookings” are
-  tracked per device in `localStorage`.
+- **Availability is public** (view without an account); **booking requires an account**. Each
+  row: label, a capacity bar (`confirmed / capacity`), “N left” or **full**. Signed out, the
+  page is read-only with a **“Sign in to book”** card (returns you here after sign-in). Signed
+  in, each row gets a one-click **Book** that awaits the authoritative outcome inline:
+  *pending…* → ✓ booked / “sold out — try another” / “already yours”. Multi-slot is allowed.
+- The booker's identity is their **session** (`book(i, session.email)`), so there's no
+  per-booking form. A row you hold shows **✓ You're in** + **Cancel**; "your bookings" need no
+  separate tracking — a slot is yours iff a confirmed booking there has `key === your email`.
 - A page-level banner when `soldOut(page)`.
 
 **Provider console** — `#/` (your pages) and `#/:username/:pagename/manage`, **auth-gated**:
@@ -167,11 +169,13 @@ the number on the cell is, by construction, the verified count.
 ## 4. Local operation (this increment)
 
 - **State**: each page is a verified `Page` in `localStorage` under `quota:page:<id>`; the
-  catalog (`username/pagename → id`, your page list) under `quota:catalog`; your booker key and
-  bookings under `quota:me`.
-- **Identity**: locally there is no auth and a single namespace — *you are both provider and
-  booker*. A stored handle names your pages; an anonymous key identifies you as a booker (for
-  dedup + “your bookings” + cancel). This is the honest single-device sandbox.
+  catalog (`username/pagename → id`, your page list) under `quota:catalog`; the signed-in
+  session under `quota:session`; the people directory (email → name) under `quota:people`.
+- **Identity**: one **account** model — sign in (faked magic link) with name + email; "provider"
+  just means you've created a page. Booking uses your session email as the verified dedup `key`
+  (so the same account can't double-book a slot, and "your bookings" falls out of `key ===
+  email`). Names are PII kept in the shell directory, shown to the provider. Locally it's a
+  single-device sandbox, so you can be both roles.
 - **Why it already feels right**: because `book()` is fallible/async and the UI renders only
   verified outputs, the local app behaves exactly as the multi-device one will — minus real
   concurrency.

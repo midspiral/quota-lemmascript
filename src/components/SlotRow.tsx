@@ -1,6 +1,7 @@
 import { Bar, Button } from "./ui"
 
 // One slot in the public booking list (the airy single-column centerpiece).
+// When not signed in (`interactive` false) it shows availability read-only.
 export function SlotRow(props: {
   label: string
   taken: number
@@ -8,11 +9,12 @@ export function SlotRow(props: {
   remaining: number
   mine: boolean
   busy: boolean
+  interactive: boolean
   note?: string
   onBook: () => void
   onCancel: () => void
 }) {
-  const { label, taken, capacity, remaining, mine, busy, note, onBook, onCancel } = props
+  const { label, taken, capacity, remaining, mine, busy, interactive, note, onBook, onCancel } = props
   const full = remaining <= 0
 
   return (
@@ -27,7 +29,13 @@ export function SlotRow(props: {
       <div className="mt-3 flex items-center gap-4">
         <Bar taken={taken} capacity={capacity} />
         <div className="shrink-0">
-          {mine ? (
+          {!interactive ? (
+            full ? (
+              <span className="text-sm text-stone-400">full</span>
+            ) : (
+              <span className="text-sm text-stone-400">available</span>
+            )
+          ) : mine ? (
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-amber-700">✓ You're in</span>
               <Button variant="danger" onClick={onCancel} disabled={busy}>

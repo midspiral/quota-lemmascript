@@ -32,6 +32,7 @@ try {
   ok("sign-in screen renders")
 
   step("request + open magic link")
+  await page.getByPlaceholder("Your name").fill("Sam")
   await page.getByPlaceholder("you@example.com").fill("sam@example.com")
   await page.getByRole("button", { name: "Send magic link" }).click()
   const link = page.getByRole("link", { name: /Open magic link/ })
@@ -61,6 +62,14 @@ try {
   await page.getByText("You're in").waitFor({ timeout: 8000 })
   await page.screenshot({ path: shot("booked") })
   ok("booked a slot; 'You're in' shown")
+
+  step("provider sees the booker by name")
+  await page.evaluate(() => {
+    location.hash = "#/sam/yoga-with-sam/manage"
+  })
+  await page.getByRole("button", { name: "View public page" }).waitFor({ timeout: 8000 })
+  await page.screenshot({ path: shot("manage-booked") })
+  ok("editor reachable after booking")
 } catch (e) {
   fail(`flow threw: ${e.message}`)
   await page.screenshot({ path: shot("error") }).catch(() => {})

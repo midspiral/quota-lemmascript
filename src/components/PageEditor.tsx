@@ -7,6 +7,7 @@ import { usePage } from "../useQuota"
 import { NotFound } from "./NotFound"
 import { Bar, Button, Card, Input } from "./ui"
 import { bookingHref, navigate } from "../router"
+import { nameFor } from "../identity"
 
 export function PageEditor({
   username,
@@ -22,8 +23,6 @@ export function PageEditor({
   if (session.handle !== username) return <NotFound message="This isn't your page to manage." />
   return <EditorInner pageId={ref.pageId} username={username} pagename={pagename} />
 }
-
-const shortKey = (k: string): string => k.replace(/-/g, "").slice(0, 6)
 
 function EditorInner({ pageId, username, pagename }: { pageId: string; username: string; pagename: string }) {
   const store = useMemo(() => loadStore(pageId), [pageId])
@@ -122,10 +121,10 @@ function EditorInner({ pageId, username, pagename }: { pageId: string; username:
                   {bookers.map((b) => (
                     <span
                       key={b.id}
-                      className="rounded-full bg-stone-100 px-2 py-0.5 font-mono text-xs text-stone-500"
-                      title={`booking ${shortKey(b.id)}`}
+                      className="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600"
+                      title={b.key}
                     >
-                      {shortKey(b.key)}
+                      {nameFor(b.key)}
                     </span>
                   ))}
                 </div>

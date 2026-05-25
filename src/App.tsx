@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
-import type { Auth } from "./auth"
-import { createLocalAuth } from "./auth"
-import { useRoute, navigate } from "./router"
+import { auth } from "./config"
+import { rememberPerson } from "./identity"
+import { useRoute, navigate, manageHref } from "./router"
 import { useSession } from "./useQuota"
 import { SignIn } from "./components/SignIn"
 import { Console } from "./components/Console"
@@ -11,9 +11,6 @@ import { PageEditor } from "./components/PageEditor"
 import { NotFound } from "./components/NotFound"
 import { Button } from "./components/ui"
 
-// One auth instance for the app (LocalAuth today; RemoteAuth at the Cloudflare stage).
-const auth: Auth = createLocalAuth()
-
 export default function App() {
   const route = useRoute()
   const session = useSession(auth)
@@ -21,13 +18,13 @@ export default function App() {
   let screen
   switch (route.name) {
     case "home":
-      screen = session !== null ? <Console session={session} /> : <SignIn auth={auth} />
+      screen = session !== null ? <Console session={session} /> : <SignIn auth={auth} returnTo="/" />
       break
     case "new":
-      screen = session !== null ? <NewPage session={session} /> : <SignIn auth={auth} />
+      screen = session !== null ? <NewPage session={session} /> : <SignIn auth={auth} returnTo="/new" />
       break
     case "auth":
-      screen = <AuthCallback auth={auth} token={route.token} />
+      screen = <AuthCallback token={route.token} returnTo={route.returnTo} />
       break
     case "booking":
       screen = <BookingPage username={route.username} pagename={route.pagename} />
@@ -37,7 +34,7 @@ export default function App() {
         session !== null ? (
           <PageEditor username={route.username} pagename={route.pagename} session={session} />
         ) : (
-          <SignIn auth={auth} />
+          <SignIn auth={auth} returnTo={manageHref(route.username, route.pagename).slice(1)} />
         )
       break
     default:
@@ -53,7 +50,7 @@ export default function App() {
           </a>
           {session !== null && (
             <div className="flex items-center gap-3 text-sm">
-              <span className="font-mono text-xs text-stone-400">{session.handle}</span>
+              <span className="text-stone-500">{session.name}</span>
               <button
                 className="text-stone-500 hover:text-stone-800"
                 onClick={() => {
@@ -72,15 +69,16 @@ export default function App() {
   )
 }
 
-function AuthCallback({ auth, token }: { auth: Auth; token: string }) {
+function AuthCallback({ token, returnTo }: { token: string; returnTo: string }) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
     auth
       .signInWithToken(token)
-      .then(() => {
-        if (active) navigate("/")
+      .then((session) => {
+        rememberPerson(session.email, session.name)
+        if (active) navigate(returnTo)
       })
       .catch((e: unknown) => {
         if (active) setError(e instanceof Error ? e.message : String(e))
@@ -88,7 +86,7 @@ function AuthCallback({ auth, token }: { auth: Auth; token: string }) {
     return () => {
       active = false
     }
-  }, [token])
+  }, [token, returnTo])
 
   return (
     <div className="mx-auto max-w-md px-5 py-24 text-center">
