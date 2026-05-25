@@ -14,10 +14,13 @@ and, as it turns out, the opposite concurrency story (§3).
 
 ## 1. The product
 
-- A signed-in **provider** creates a page: a title and a handful of **featured slots**, each
-  with a **capacity** (default **1** — an appointment; a class with N seats is just N sibling
-  slots sharing a label). They get a shareable link.
-- **No login for bookers.** Anyone opens the link and **grabs a slot**. They get a
+- A signed-in **provider** picks a **username** (their public handle) and creates pages under
+  it. Each page is a title and a handful of **featured slots**, each with a **capacity**
+  (default **1** — an appointment; a class with N seats is just N sibling slots sharing a
+  label). Each page lives at a **vanity URL — `quota.app/username/pagename`** — branded and
+  shareable by design (§6).
+- **No login for bookers.** Anyone opens the link and **grabs a slot** — and may grab **as
+  many different slots as they like** on a page (book a morning *and* an afternoon). They get a
   confirmation with a private **cancellation link**. When a slot is full, it shows as full and
   can't be grabbed — never oversold.
 - A **live availability view** shows, per slot, how many seats remain. The provider sees **who
@@ -40,8 +43,11 @@ Concretely, Quota's verified core guarantees:
    `≤` its capacity — always, preserved by every transition. This is the load-bearing
    invariant.
 2. **Accepted exactly when there's room (honest decision).** A booking attempt is accepted
-   **iff** the slot exists, has remaining capacity, and this booker isn't already holding it
-   (idempotent). Reject ⇒ state unchanged. No phantom rejections, no silent overbooking.
+   **iff** the slot exists and has remaining capacity. A retry of a booking the same booker
+   already holds *for that slot* is **idempotent** — it returns the existing booking, never a
+   second seat — so a double-click or reconnect can't consume two seats. (A booker may still
+   hold *many different* slots; the idempotency is per-(slot, booker).) Reject ⇒ state
+   unchanged. No phantom rejections, no silent overbooking.
 3. **Conservation.** `remaining(slot) + confirmed(slot) === capacity(slot)`, and `remaining ≥ 0`
    on a well-formed page — seats never vanish or appear.
 4. **Cancelling only frees seats (reverse monotonicity).** A cancellation never raises any
@@ -147,6 +153,13 @@ construction**, so the "no two slots collide" obligation — the part Quorum *de
 A2 id-uniqueness) — never arises. capacity safety becomes a clean per-index count bound. The
 index↔(date, time, label) map is pure shell, exactly like Quorum's grid.
 
+**What's deliberately *not* in this model.** There is no `Provider` and no
+`username`/`pagename` here. Provider identity, the vanity-URL routing, and the
+username/pagename registry are **shell + infra** (§6) — consistent with "auth is trusted." A
+`Page` is addressed by an opaque `id`; how a human-readable `username/pagename` resolves to
+that `id` (and to a Durable Object) is the unverified shell's job. The verified core never
+sees a username.
+
 **Invariant `Inv(p)`** — what a well-formed page satisfies:
 
 - **A1.** Every slot's confirmed bookings are within capacity:
@@ -208,10 +221,26 @@ records (`PRIMARY KEY (page_id, seq)` enforces append-only integrity and gives t
 canonical order); `R2` holds immutable NDJSON exports. Export and query endpoints **replay the
 same verified functions server-side**, so their answers provably match the live app.
 
+**Addressing: vanity URLs `username/pagename`.** Unlike Quorum's unlisted random codes, Quota
+pages are **branded and meant to be shared** — `quota.app/{username}/{pagename}`. This needs a
+small **registry** (the only piece of global, cross-DO state):
+
+- **`username`** is globally unique (a provider's public handle); **`pagename`** is a slug
+  unique *within* that provider. A `D1` registry table — `providers(username PK, email)` and
+  `pages(username, pagename, page_id, PRIMARY KEY (username, pagename))` — enforces both
+  uniquenesses and maps a path to the opaque `page_id`.
+- The booking **Durable Object is addressed by `idFromName(page_id)`** (a stable opaque id
+  minted at creation), *not* by the path — so renaming a page (or a username) is a registry
+  update that never moves the DO or disturbs the op log. Path → `page_id` is one registry
+  lookup, then straight to the DO.
+- Reserved-word / format validation on usernames and pagenames (and the global username
+  allocation) are **trusted shell** — they gate *naming*, never *booking correctness*.
+
 **Provider auth: magic-link email.** Provider enters their email → Worker mails a signed,
-expiring link → a session cookie/JWT authorizes the **provider/management routes only**.
-Booking routes are open. **Auth is a trust-boundary concern** — it gates *who may create/edit
-slots and see bookers*, but the booking core's correctness does not depend on it.
+expiring link → a session cookie/JWT authorizes the **provider/management routes only** (claim
+a username, create/edit pages and slots, see bookers). Booking routes are open. **Auth is a
+trust-boundary concern** — it gates *who may create/edit slots and see bookers*, but the
+booking core's correctness does not depend on it.
 
 **Privacy.** The public booking page sees **availability (counts) only**; bookers' identities
 (`name`/`key`/contact) are visible **only to the authenticated provider**. The DO redacts the
@@ -219,8 +248,8 @@ broadcast to public sockets accordingly. A booker's own confirmation/cancellatio
 the private booking `id` (their cancellation token).
 
 **The store seam — adapted for fallible writes.** Quorum's `dispatch(op)` was fire-and-forget
-(optimistic). Quota's `dispatch(attempt)` **returns a promise of `{accepted, page}`** — the
-UI shows *pending → confirmed / full* based on the DO's reply. One interface, two
+(optimistic). Quota's `dispatch(attempt)` **returns a promise of `{outcome, page}`** — the UI
+shows *pending → confirmed / already-yours / full* based on the DO's reply. One interface, two
 implementations (local for dev/single-device, remote `RemoteStore` over WebSocket), no UI
 rewrite — same discipline as Quorum, with the pessimistic return value as the only shape
 change.
@@ -272,22 +301,39 @@ function capacityAt(slots: Slot[], idx: number): number
 // room iff in range and under capacity.
 //@ ensures \result === (0 <= idx && idx < p.slots.length && confirmedCount(p.bookings, idx) < capacityAt(p.slots, idx))
 function hasRoom(p: Page, idx: number): boolean
+
+// Does `key` already hold a confirmed booking for slot idx? Total recursive — the
+// per-(slot, booker) idempotency check (NOT a one-per-person rule). Returns false for a
+// booker who only holds OTHER slots, so multi-slot booking is unrestricted.
+function keyHolds(bs: Booking[], idx: number, key: string): boolean
 ```
 
-The headline transition — **accept iff there is room and the booker isn't already holding it**:
+The headline transition. The outcome is a **three-way verdict**, so the shell can tell a happy
+retry from a real "sold out":
+
+- **`confirmed`** — a *new* seat was appended (there was room and this booker didn't already
+  hold this slot).
+- **`duplicate`** — this booker already holds this slot; **idempotent success**, no new seat,
+  page unchanged. (A double-click / reconnect lands here, not on `full`.)
+- **`full`** — no room (or no such slot); page unchanged.
+
+A booker holding *other* slots never affects any of this — the check is per-(slot, booker), so
+multi-slot booking is unrestricted by design.
 
 ```ts
-interface BookResult { accepted: boolean; page: Page }
+type BookOutcome = "confirmed" | "duplicate" | "full"
+interface BookResult { outcome: BookOutcome; page: Page }
 
-// Total: append a confirmed booking iff there's room and `key` doesn't already hold idx.
-// Reject ⇒ page unchanged. Invariant preservation is the separate lemma below.
+// Total: append a confirmed booking iff there's room AND `key` doesn't already hold idx;
+// a duplicate is idempotent success; anything else is `full`. Only `confirmed` mutates.
+// Invariant preservation is the separate lemma below.
 //@ ensures \result.page.slots === p.slots
-//@ ensures \result.accepted ===
-//@   (hasRoom(p, idx) && !keyHolds(p.bookings, idx, key))
-//@ ensures \result.accepted === false ==> \result.page === p
+//@ ensures \result.outcome === "duplicate" === keyHolds(p.bookings, idx, key)
+//@ ensures \result.outcome === "confirmed" === (!keyHolds(p.bookings, idx, key) && hasRoom(p, idx))
+//@ ensures \result.outcome === "confirmed" || \result.page === p   // duplicate/full leave state untouched
 function tryBook(p: Page, idx: number, bookingId: string, key: string, seq: number): BookResult
 
-// Capacity safety: a booking attempt never breaks the invariant.
+// Capacity safety: a booking attempt never breaks the invariant — for ANY outcome.
 //@ requires wellFormed(p)
 //@ ensures wellFormed(tryBook(p, idx, bookingId, key, seq).page)
 function tryBookPreservesInv(p: Page, idx: number, bookingId: string, key: string, seq: number): boolean { return true }
@@ -460,10 +506,17 @@ growing without restructuring it.
 
 ## 11. Open questions / deferred
 
-- **Booker identity & dedup.** `key` = a localStorage token (so a refresh doesn't double-book,
-  and "my bookings" works per device). Should the dedup also key on email when given, to stop
-  the same person grabbing the last seat from two devices? Impersonation/abuse stays a
-  trusted/rate-limiting concern (a malicious client can present any `key`).
+- **Booker identity & dedup.** `key` = a localStorage token. Multi-slot booking is allowed by
+  design, so the dedup is *only* per-(slot, booker) idempotency (a refresh/double-click doesn't
+  double-book the *same* slot; "my bookings" works per device). One open choice: also key
+  idempotency on email when given, so the same person can't take *two* seats of the *same* slot
+  from two devices. Impersonation/abuse stays a trusted/rate-limiting concern (a malicious
+  client can present any `key`).
+- **Optional per-page per-person cap (deferred, verified-able).** If a provider wants "at most
+  K slots per person on this page," it's a clean verified extension: a `personCount(bookings,
+  key)` recursive count and a `tryBook` guard `personCount < maxPerPerson`, with a snoc lemma
+  and invariant just like capacity. Default is **unlimited** (per your call); add only if a
+  provider asks for it.
 - **Hold / TTL semantics.** Should a click place a short **tentative hold** (seat reserved for
   N minutes pending confirmation) rather than an instant confirm? That adds a timed
   `held → confirmed | expired` sub-state and a clock dependency — a candidate Stage-4 extension
