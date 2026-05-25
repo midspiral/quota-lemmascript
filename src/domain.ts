@@ -200,3 +200,47 @@ export function tryBookPreservesInv(p: Page, idx: number, bookingId: string, key
   //@ ensures wellFormed(tryBook(p, idx, bookingId, key, seq).page)
   return true
 }
+
+// ── Conservation & cancellation (Stage 0b / Family C) ─────────
+
+// Cancel the booking whose id === bookingId: flip its status to "cancelled".
+// The log is append-only — we never remove a row, only flip its status — so the
+// length is unchanged (and replay/audit stays faithful).
+export function cancelById(bs: Booking[], bookingId: string): Booking[] {
+  //@ verify
+  //@ decreases bs.length
+  //@ ensures \result.length === bs.length
+  if (bs.length === 0) return []
+  if (bs[0].id === bookingId) return [{ ...bs[0], status: "cancelled" }, ...bs.slice(1)]
+  return [bs[0], ...cancelById(bs.slice(1), bookingId)]
+}
+
+// C: cancelling never RAISES a slot's count — it frees a seat or leaves it
+// untouched (reverse monotonicity). Proof by induction on bs. (Pure-carrier.)
+export function cancelMonotone(bs: Booking[], bookingId: string, idx: number): boolean {
+  //@ verify
+  //@ decreases bs.length
+  //@ ensures confirmedCount(cancelById(bs, bookingId), idx) <= confirmedCount(bs, idx)
+  return true
+}
+
+// A cancellation preserves the no-overbooking invariant: every count only goes
+// down, so each stays within capacity. (Reverse-monotone ⇒ trivially safe.)
+export function cancel(p: Page, bookingId: string): Page {
+  //@ verify
+  //@ requires wellFormed(p)
+  //@ ensures wellFormed(\result)
+  //@ ensures \result.slots === p.slots
+  return { ...p, bookings: cancelById(p.bookings, bookingId) }
+}
+
+// Conservation: remaining seats + confirmed bookings === capacity, and on a
+// well-formed page (where no slot is oversold) the remainder is never negative.
+export function remaining(p: Page, idx: number): number {
+  //@ verify
+  //@ requires wellFormed(p)
+  //@ requires 0 <= idx && idx < p.slots.length
+  //@ ensures \result + confirmedCount(p.bookings, idx) === capacityAt(p.slots, idx)
+  //@ ensures \result >= 0
+  return capacityAt(p.slots, idx) - confirmedCount(p.bookings, idx)
+}

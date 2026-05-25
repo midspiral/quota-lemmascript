@@ -177,3 +177,61 @@ lemma tryBookPreservesInv_ensures(p: Page, idx: int, bookingId: string, key: str
   ensures wellFormed(tryBook(p, idx, bookingId, key, seq_).page)
 {
 }
+
+function cancelById(bs: seq<Booking>, bookingId: string): seq<Booking>
+  decreases |bs|
+{
+  if (|bs| == 0) then
+    []
+  else
+    if (bs[0].id == bookingId) then
+      ([bs[0].(status := BookingStatus.cancelled)] + bs[1..])
+    else
+      ([bs[0]] + cancelById(bs[1..], bookingId))
+}
+
+lemma cancelById_ensures(bs: seq<Booking>, bookingId: string)
+  ensures (|cancelById(bs, bookingId)| == |bs|)
+{
+}
+
+function cancelMonotone(bs: seq<Booking>, bookingId: string, idx: int): bool
+  decreases |bs|
+{
+  true
+}
+
+lemma cancelMonotone_ensures(bs: seq<Booking>, bookingId: string, idx: int)
+  ensures (confirmedCount(cancelById(bs, bookingId), idx) <= confirmedCount(bs, idx))
+{
+}
+
+function cancel(p: Page, bookingId: string): Page
+  requires wellFormed(p)
+{
+  p.(bookings := cancelById(p.bookings, bookingId))
+}
+
+lemma cancel_ensures(p: Page, bookingId: string)
+  requires wellFormed(p)
+  ensures wellFormed(cancel(p, bookingId))
+  ensures (cancel(p, bookingId).slots == p.slots)
+{
+}
+
+function remaining(p: Page, idx: int): int
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+{
+  (capacityAt(p.slots, idx) - confirmedCount(p.bookings, idx))
+}
+
+lemma remaining_ensures(p: Page, idx: int)
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+  ensures ((remaining(p, idx) + confirmedCount(p.bookings, idx)) == capacityAt(p.slots, idx))
+  ensures (remaining(p, idx) >= 0)
+{
+}

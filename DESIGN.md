@@ -265,10 +265,10 @@ abuse/rate-limiting/identity spoofing.
 Grouped into families and sequenced into stages. We design the model now so every family is
 reachable; we prove them in order. Spec sketches use LemmaScript syntax (`forall(k, P)`,
 `\result`, no `\old`; each `//@ ensures` becomes a *separate* `_ensures` lemma, so functions
-are **pure recursive** and the kernel is **total**). **Stage 0 (Families A + B) is implemented
-and verified** (`src/domain.ts`, 20 Dafny VCs, 0 errors); those specs below are the real ones.
-The remaining stages are _planned_ — their sketches are the intended specs, pinned during
-implementation.
+are **pure recursive** and the kernel is **total**). **Stages 0 + 0b (Families A, B, C) are
+implemented and verified** (`src/domain.ts`, 27 Dafny VCs, 0 errors); those specs below are the
+real ones. The remaining stages are _planned_ — their sketches are the intended specs, pinned
+during implementation.
 
 ### Family A — Well-formedness (the no-overbooking invariant)
 `Inv(p)` as in §5, via a reflection-carrying recursive predicate:
@@ -474,7 +474,7 @@ function closeSlot(p: Page, idx: number): Page
 | Stage | Lands | Families | Status |
 |-------|-------|----------|--------|
 | **0 — spine** | Total `holds`/`confirmedCount`/`capacityAt`/`hasRoom`; `withinCapacity`/`wellFormed`; `tryBook` (3-way `confirmed`/`duplicate`/`full`, accept-iff-room) + `tryBookPreservesInv` (capacity safety); `confirmedCountSnoc` homomorphism + `withinCapacityUpto` reflection (sound + complete) + `withinCapacityUptoAppend`. | A, B | ✅ **verified** (20 VCs, 0 errors) |
-| **0b — conservation + cancel** | `remaining` (conservation, `≥ 0`); `cancelById`/`cancelMonotone`/`cancelPreservesInv`. | C | _planned_ |
+| **0b — conservation + cancel** | `remaining` (conservation `remaining + confirmed === capacity`, `≥ 0`); `cancelById`/`cancelMonotone` (reverse monotonicity) / `cancel` (Inv-preserving). | C | ✅ **verified** (27 VCs, 0 errors) |
 | **1 — provider mutations** | `initPage`/`addSlot`/`setCapacity`/`closeSlot` preserve `Inv`; the "can't set capacity below booked" obligation. | A, G | _planned_ |
 | **2 — op model + replay** | `Op`/`applyOp`/`replay` (total) + `replayPreservesInv`; `confirmedCountConcat` count homomorphism. | D (core) | _planned_ |
 | **2b — order boundary** | `noContentionIsOrderFree` (under-subscription ⇒ order-free, the Quorum-regime bridge). Full permutation invariance blocked on `multiset` in specs. | D | _planned_ |

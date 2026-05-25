@@ -1,6 +1,6 @@
 // Runtime smoke for the verified core (Node strips the TS types).
 //   node test/smoke.ts
-import { tryBook, wellFormed, confirmedCount, hasRoom, type Page } from "../src/domain.ts"
+import { tryBook, cancel, remaining, wellFormed, confirmedCount, hasRoom, type Page } from "../src/domain.ts"
 
 let failures = 0
 function check(cond: boolean, msg: string): void {
@@ -48,6 +48,19 @@ check(wellFormed(r4.page), "well-formed after multi-slot booking")
 const r5 = tryBook(r1.page, 9, "bk5", "carol", 5)
 check(r5.outcome === "full", "out-of-range slot => full")
 check(r5.page === r1.page, "rejected attempt leaves the page unchanged")
+
+// Cancelling frees the seat (reverse monotonicity + conservation). r4.page has
+// alice on slot 0 (bk1) and slot 1 (bk4).
+const p6 = cancel(r4.page, "bk1") // cancel alice's slot-0 booking
+check(wellFormed(p6), "well-formed after cancellation")
+check(confirmedCount(p6.bookings, 0) === 0, "slot 0 freed after cancel")
+check(remaining(p6, 0) === 1, "remaining on freed slot 0 back to 1")
+check(remaining(p6, 1) === 0, "slot 1 still full (remaining 0)")
+
+// Bob can now grab the freed slot 0.
+const r7 = tryBook(p6, 0, "bk7", "bob", 7)
+check(r7.outcome === "confirmed", "a freed slot is bookable again")
+check(wellFormed(r7.page), "well-formed after re-booking the freed slot")
 
 if (failures === 0) {
   console.log("\nAll smoke checks passed.")

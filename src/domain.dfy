@@ -212,3 +212,86 @@ lemma tryBookPreservesInv_ensures(p: Page, idx: int, bookingId: string, key: str
     withinCapacityUptoAppend_ensures(p.slots, p.bookings, b, |p.slots|);
   }
 }
+
+function cancelById(bs: seq<Booking>, bookingId: string): seq<Booking>
+  decreases |bs|
+{
+  if (|bs| == 0) then
+    []
+  else
+    if (bs[0].id == bookingId) then
+      ([bs[0].(status := BookingStatus.cancelled)] + bs[1..])
+    else
+      ([bs[0]] + cancelById(bs[1..], bookingId))
+}
+
+lemma cancelById_ensures(bs: seq<Booking>, bookingId: string)
+  ensures (|cancelById(bs, bookingId)| == |bs|)
+{
+}
+
+function cancelMonotone(bs: seq<Booking>, bookingId: string, idx: int): bool
+  decreases |bs|
+{
+  true
+}
+
+lemma cancelMonotone_ensures(bs: seq<Booking>, bookingId: string, idx: int)
+  ensures (confirmedCount(cancelById(bs, bookingId), idx) <= confirmedCount(bs, idx))
+{
+  // --- proof: induction on bs. The matched row is flipped to cancelled (its
+  // contribution drops from 0-or-1 to 0); every other row recurses by the IH. ---
+  if (|bs| != 0) {
+    if (bs[0].id == bookingId) {
+      assert ([bs[0].(status := BookingStatus.cancelled)] + bs[1..])[1..] == bs[1..];
+    } else {
+      assert ([bs[0]] + cancelById(bs[1..], bookingId))[1..] == cancelById(bs[1..], bookingId);
+      cancelMonotone_ensures(bs[1..], bookingId, idx);
+    }
+  }
+}
+
+function cancel(p: Page, bookingId: string): Page
+  requires wellFormed(p)
+{
+  p.(bookings := cancelById(p.bookings, bookingId))
+}
+
+lemma cancel_ensures(p: Page, bookingId: string)
+  requires wellFormed(p)
+  ensures wellFormed(cancel(p, bookingId))
+  ensures (cancel(p, bookingId).slots == p.slots)
+{
+  // --- proof: every slot's count after cancelling is <= its count before
+  // (cancelMonotone) <= its capacity (sound reflection on wellFormed(p)), so the
+  // quantified bound holds and rebuilds withinCapacity (completeness). ---
+  var nb := cancelById(p.bookings, bookingId);
+  withinCapacityUpto_ensures(p.slots, p.bookings, |p.slots|);
+  forall j: int | (0 <= j < |p.slots|)
+    ensures confirmedCount(nb, j) <= p.slots[j].capacity
+  {
+    cancelMonotone_ensures(p.bookings, bookingId, j);
+  }
+  withinCapacityUptoComplete_ensures(p.slots, nb, |p.slots|);
+}
+
+function remaining(p: Page, idx: int): int
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+{
+  (capacityAt(p.slots, idx) - confirmedCount(p.bookings, idx))
+}
+
+lemma remaining_ensures(p: Page, idx: int)
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+  ensures ((remaining(p, idx) + confirmedCount(p.bookings, idx)) == capacityAt(p.slots, idx))
+  ensures (remaining(p, idx) >= 0)
+{
+  // --- proof: conservation is arithmetic; >= 0 because wellFormed bounds the
+  // confirmed count by the slot's capacity (sound reflection at j == idx). ---
+  withinCapacityUpto_ensures(p.slots, p.bookings, |p.slots|);
+  capacityAt_ensures(p.slots, idx);
+}
