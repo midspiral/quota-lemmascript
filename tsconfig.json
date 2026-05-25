@@ -10,7 +10,7 @@
     "allowJs": true,
     "checkJs": false,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "types": []
+    "types": ["vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.jsx"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

@@ -10,9 +10,13 @@ Cloudflare backend.
 > No counting, capacity, or accept/reject logic lives in components — they call `domain.ts`.
 > Build local-first; the same UI then talks to Cloudflare with no rewrite.
 
-Stack: **Vite + React + TypeScript (strict)**, **Tailwind CSS** (elegant light theme),
+Stack: **Vite + React 19 + TypeScript (strict)**, **Tailwind CSS v4** (elegant light theme),
 hash-based routing. Everything is `.ts`/`.tsx`; the UI is typechecked against the core's
 exported `Page`/`Slot`/`Booking` types.
+
+> **Status: built (local-first).** Both seams (`store.ts`, `auth.ts`), the catalog/identity
+> modules, and all screens are in `src/`. `npm run dev` runs it; `npm run typecheck` and
+> `npm run build` are clean. The Cloudflare swap (§5) is the next increment.
 
 ---
 
