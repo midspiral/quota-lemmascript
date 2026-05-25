@@ -542,3 +542,44 @@ lemma soldOut_ensures(p: Page)
   ensures (soldOut(p) == forall j: int :: ((0 <= j) ==> (j < |p.slots|) ==> !(hasRoom(p, j))))
 {
 }
+
+function keyHoldsSnoc(bs: seq<Booking>, b: Booking, idx: int, key: string): bool
+  decreases |bs|
+{
+  true
+}
+
+lemma keyHoldsSnoc_ensures(bs: seq<Booking>, b: Booking, idx: int, key: string)
+  ensures (keyHolds((bs + [b]), idx, key) == (keyHolds(bs, idx, key) || ((b.status.confirmed? && (b.slotIdx == idx)) && (b.key == key))))
+{
+}
+
+function bookDelta(p: Page, idx: int, bookingId: string, key: string, seq_: int, s: int): bool
+{
+  true
+}
+
+lemma bookDelta_ensures(p: Page, idx: int, bookingId: string, key: string, seq_: int, s: int)
+  ensures (confirmedCount(tryBook(p, idx, bookingId, key, seq_).page.bookings, s) == (confirmedCount(p.bookings, s) + (if ((!(keyHolds(p.bookings, idx, key)) && hasRoom(p, idx)) && (idx == s)) then 1 else 0)))
+{
+}
+
+function keyHoldsAfterBook(p: Page, idx: int, bookingId: string, key: string, seq_: int, s: int, k: string): bool
+{
+  true
+}
+
+lemma keyHoldsAfterBook_ensures(p: Page, idx: int, bookingId: string, key: string, seq_: int, s: int, k: string)
+  ensures (keyHolds(tryBook(p, idx, bookingId, key, seq_).page.bookings, s, k) == (keyHolds(p.bookings, s, k) || (((!(keyHolds(p.bookings, idx, key)) && hasRoom(p, idx)) && (idx == s)) && (key == k))))
+{
+}
+
+function bookCountOrderInvariant(p: Page, i1: int, id1: string, k1: string, q1: int, i2: int, id2: string, k2: string, q2: int, s: int): bool
+{
+  true
+}
+
+lemma bookCountOrderInvariant_ensures(p: Page, i1: int, id1: string, k1: string, q1: int, i2: int, id2: string, k2: string, q2: int, s: int)
+  ensures (confirmedCount(tryBook(tryBook(p, i1, id1, k1, q1).page, i2, id2, k2, q2).page.bookings, s) == confirmedCount(tryBook(tryBook(p, i2, id2, k2, q2).page, i1, id1, k1, q1).page.bookings, s))
+{
+}

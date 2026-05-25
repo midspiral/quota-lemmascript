@@ -130,6 +130,19 @@ check(soldOut(q) === false, "not sold out while slot 0 has room")
 q = tryBook(q, 0, "q-a2", "p3", 3).page
 check(soldOut(q) === true, "sold out once every slot is full")
 
+// ── Order boundary (Stage 2b) ─────────────────────────────────
+
+// Two bookers race for one seat. Applied in BOTH orders: the count converges
+// (safety/availability is order-free), but the winner differs (fairness isn't).
+const seat = initPage("o1", "One seat", [{ label: "The seat", capacity: 1 }])
+const ab = tryBook(tryBook(seat, 0, "ba", "alice", 1).page, 0, "bb", "bob", 2).page
+const ba = tryBook(tryBook(seat, 0, "bb", "bob", 2).page, 0, "ba", "alice", 1).page
+check(confirmedCount(ab.bookings, 0) === confirmedCount(ba.bookings, 0),
+  "count is order-invariant under contention (no locking needed for safety)")
+check(confirmedCount(ab.bookings, 0) === 1, "exactly one seat filled, either order")
+check(bookersOf(ab, 0)[0].key !== bookersOf(ba, 0)[0].key,
+  "but the WINNER depends on order (only fairness needs the serializer)")
+
 if (failures === 0) {
   console.log("\nAll smoke checks passed.")
 } else {

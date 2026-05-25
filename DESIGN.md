@@ -267,8 +267,8 @@ abuse/rate-limiting/identity spoofing.
 Grouped into families and sequenced into stages. We design the model now so every family is
 reachable; we prove them in order. Spec sketches use LemmaScript syntax (`forall(k, P)`,
 `\result`, no `\old`; each `//@ ensures` becomes a *separate* `_ensures` lemma, so functions
-are **pure recursive** and the kernel is **total**). **Stages 0, 0b, 1, 2, 3 (Families A, B, C, G,
-D-core, F) are implemented and verified** (`src/domain.ts`, 67 Dafny VCs, 0 errors); those specs below are the
+are **pure recursive** and the kernel is **total**). **Stages 0, 0b, 1, 2, 2b, 3 (Families A, B,
+C, G, D, F) are implemented and verified** (`src/domain.ts`, 71 Dafny VCs, 0 errors); those specs below are the
 real ones. The remaining stages are _planned_ — their sketches are the intended specs, pinned
 during implementation.
 
@@ -389,18 +389,25 @@ But — the inversion — the **accepted set** is *not* order-independent under 
 function replayPreservesInv(p: Page, ops: Op[]): boolean { return true }
 ```
 
+**The order boundary — implemented & verified (Stage 2b).** The sharpest expressible form
+isn't a "no-contention" carve-out — it's that the count is order-invariant *unconditionally*,
+contention included (the loser is simply rejected in either order, so the slot saturates to the
+same number):
 ```ts
-// PLANNED (the bridge to Quorum's regime): if every slot's number of distinct booking
-// attempts is <= its remaining capacity (under-subscription), then processing the batch in
-// ANY order accepts ALL attempts and yields the same final counts — order stops mattering.
-//@ requires underSubscribed(p, attempts)
-//@ ensures forall(perm, isPermutation(perm, attempts) ==>
-//@           sameCounts(processAll(p, attempts), processAll(p, perm)))
-function noContentionIsOrderFree(p: Page, attempts: Attempt[]): boolean { return true }
+// Two booking attempts, applied in EITHER order, leave every slot's confirmed count identical.
+//@ ensures confirmedCount(tryBook(tryBook(p, i1,id1,k1,q1).page, i2,id2,k2,q2).page.bookings, s)
+//@       === confirmedCount(tryBook(tryBook(p, i2,id2,k2,q2).page, i1,id1,k1,q1).page.bookings, s)
+function bookCountOrderInvariant(p: Page, i1,id1,k1,q1, i2,id2,k2,q2, s): boolean { return true }
 ```
-(Full element-permutation invariance needs `multiset` in specs — not expressible today, same
-gap Quorum noted; the concat-homomorphism + the bounded-demand statement are the expressible
-core.)
+So availability (`hasRoom`/`availableSlots`/`soldOut`, all functions of the count) is
+order-free — **no locking is needed for safety**. What *is* order-sensitive is only **which
+booker wins** the contended seat — i.e. *fairness* — and that is exactly what the DO's total
+order provides. This is the precise, mechanized statement of "Quota is Quorum inverted."
+
+Full element-permutation invariance over an N-attempt batch (vs. the pairwise statement above)
+would need `multiset` in specs — not expressible today, the same gap Quorum noted; the pairwise
+order-invariance + the concat-homomorphism are the expressible core, and they already license
+the architecture (any reordering is a sequence of adjacent swaps, each count-preserving).
 
 ### Family E — Export faithfulness & query soundness
 Export is the **append-only op log**; faithfulness is **replay round-trip** + determinism:
@@ -479,7 +486,7 @@ function closeSlot(p: Page, idx: number): Page
 | **0b — conservation + cancel** | `remaining` (conservation `remaining + confirmed === capacity`, `≥ 0`); `cancelById`/`cancelMonotone` (reverse monotonicity) / `cancel` (Inv-preserving). | C | ✅ **verified** (27 VCs, 0 errors) |
 | **1 — provider mutations** | `initPage`/`addSlot`/`setCapacity`/`closeSlot` preserve `Inv`; the "can't lower capacity below booked" obligation. Also **strengthened the invariant with A3** (no phantom bookings, needed by `addSlot`) and re-proved `tryBook`/`cancel` preserve it. | A, G | ✅ **verified** (47 VCs, 0 errors) |
 | **2 — op model + replay** | `Op`/`applyOp`/`replay` (total) + `applyOpPreservesInv`/`replayPreservesInv` (every reachable state well-formed); `confirmedCountConcat` count homomorphism + `confirmedCountComm` batch commutativity. | D (core) | ✅ **verified** (53 VCs, 0 errors) |
-| **2b — order boundary** | `noContentionIsOrderFree` (under-subscription ⇒ order-free, the Quorum-regime bridge). Full permutation invariance blocked on `multiset` in specs. | D | _planned_ |
+| **2b — order boundary** | `bookCountOrderInvariant`: two booking attempts, applied in **either order**, leave every slot's `confirmedCount` identical — *even under contention* (the loser is rejected either way, so the count saturates the same). Built from `bookDelta` (per-attempt count delta) + `keyHoldsSnoc`/`keyHoldsAfterBook`. The exact formal "Quorum-inversion": availability/safety is order-free (no locking), only *which booker wins* is order-sensitive (fairness needs the serializer). | D | ✅ **verified** (71 VCs, 0 errors) |
 | **3 — queries** | `bookersOf` (length === count), `availableSlots` (per-slot room mask, exact), `soldOut` (iff no slot has room). | F | ✅ **verified** (67 VCs, 0 errors) |
 | **3b — export faithfulness** | `replayRoundTrip` (E1, needs op-reconstruction from a materialized page), query-over-export soundness (E2), canonical encoding (E4). | E | _planned_ |
 | **4 — richness (optional)** | Waitlist (rejected → FIFO queue; cancel promotes the head, capacity still safe) — adds promotion semantics + FIFO/served-≤-capacity proofs. Per-slot booking windows (open/close times) as shell + a verified "closed ⇒ no accept" guard. | (extends B/C) | _deferred_ |

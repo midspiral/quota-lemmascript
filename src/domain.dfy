@@ -706,3 +706,91 @@ lemma soldOut_ensures(p: Page)
 {
   noneAvailUpto_ensures(p, |p.slots|);
 }
+
+function keyHoldsSnoc(bs: seq<Booking>, b: Booking, idx: int, key: string): bool
+  decreases |bs|
+{
+  true
+}
+
+lemma keyHoldsSnoc_ensures(bs: seq<Booking>, b: Booking, idx: int, key: string)
+  ensures (keyHolds((bs + [b]), idx, key) == (keyHolds(bs, idx, key) || ((b.status.confirmed? && (b.slotIdx == idx)) && (b.key == key))))
+{
+  // --- proof: induction on bs; (bs+[b])[1..] == bs[1..]+[b] ---
+  if (|bs| != 0) {
+    assert (bs + [b])[1..] == bs[1..] + [b];
+    keyHoldsSnoc_ensures(bs[1..], b, idx, key);
+  } else {
+    assert (bs + [b]) == [b];
+  }
+}
+
+function bookDelta(p: Page, idx: int, bookingId: string, key: string, seq_: int, s: int): bool
+{
+  true
+}
+
+lemma bookDelta_ensures(p: Page, idx: int, bookingId: string, key: string, seq_: int, s: int)
+  ensures (confirmedCount(tryBook(p, idx, bookingId, key, seq_).page.bookings, s) == (confirmedCount(p.bookings, s) + (if ((!(keyHolds(p.bookings, idx, key)) && hasRoom(p, idx)) && (idx == s)) then 1 else 0)))
+{
+  // --- proof: on accept the appended booking holds s iff idx==s (snoc); on
+  // duplicate/full the page is unchanged and the indicator is false. ---
+  if (!(keyHolds(p.bookings, idx, key)) && hasRoom(p, idx)) {
+    var b := Booking(bookingId, idx, key, BookingStatus.confirmed, seq_);
+    confirmedCountSnoc_ensures(p.bookings, b, s);
+  }
+}
+
+function keyHoldsAfterBook(p: Page, idx: int, bookingId: string, key: string, seq_: int, s: int, k: string): bool
+{
+  true
+}
+
+lemma keyHoldsAfterBook_ensures(p: Page, idx: int, bookingId: string, key: string, seq_: int, s: int, k: string)
+  ensures (keyHolds(tryBook(p, idx, bookingId, key, seq_).page.bookings, s, k) == (keyHolds(p.bookings, s, k) || (((!(keyHolds(p.bookings, idx, key)) && hasRoom(p, idx)) && (idx == s)) && (key == k))))
+{
+  // --- proof: on accept, keyHoldsSnoc adds exactly (idx, key); else page
+  // unchanged and the added disjunct's guard is false. ---
+  if (!(keyHolds(p.bookings, idx, key)) && hasRoom(p, idx)) {
+    var b := Booking(bookingId, idx, key, BookingStatus.confirmed, seq_);
+    keyHoldsSnoc_ensures(p.bookings, b, s, k);
+  }
+}
+
+function bookCountOrderInvariant(p: Page, i1: int, id1: string, k1: string, q1: int, i2: int, id2: string, k2: string, q2: int, s: int): bool
+{
+  true
+}
+
+lemma bookCountOrderInvariant_ensures(p: Page, i1: int, id1: string, k1: string, q1: int, i2: int, id2: string, k2: string, q2: int, s: int)
+  ensures (confirmedCount(tryBook(tryBook(p, i1, id1, k1, q1).page, i2, id2, k2, q2).page.bookings, s) == confirmedCount(tryBook(tryBook(p, i2, id2, k2, q2).page, i1, id1, k1, q1).page.bookings, s))
+{
+  // --- proof: each side is count(p,s) + (op1's delta at s) + (op2's delta at s),
+  // where the second op's decision is read off the first op's result. The cross
+  // terms (keyHolds / hasRoom after the first book) reduce — via keyHoldsAfterBook,
+  // bookDelta at the other index, and slot-preservation — to functions of `p`
+  // alone, symmetric in (op1, op2). The booked slot saturates to capacity the same
+  // way in both orders; every other slot is independent. Z3 closes the resulting
+  // boolean/integer identity. ---
+  var p1 := tryBook(p, i1, id1, k1, q1).page;
+  var p2 := tryBook(p, i2, id2, k2, q2).page;
+  // counts of the two double-applications
+  bookDelta_ensures(p, i1, id1, k1, q1, s);
+  bookDelta_ensures(p1, i2, id2, k2, q2, s);
+  bookDelta_ensures(p, i2, id2, k2, q2, s);
+  bookDelta_ensures(p2, i1, id1, k1, q1, s);
+  // slots are preserved by a book, so capacities match across the reorder
+  tryBook_ensures(p, i1, id1, k1, q1);
+  tryBook_ensures(p, i2, id2, k2, q2);
+  // the cross-term decisions (op2 after op1, and op1 after op2) in terms of p
+  keyHoldsAfterBook_ensures(p, i1, id1, k1, q1, i2, k2);
+  keyHoldsAfterBook_ensures(p, i2, id2, k2, q2, i1, k1);
+  bookDelta_ensures(p, i1, id1, k1, q1, i2);
+  bookDelta_ensures(p, i2, id2, k2, q2, i1);
+  hasRoom_ensures(p1, i2);
+  hasRoom_ensures(p2, i1);
+  hasRoom_ensures(p, i1);
+  hasRoom_ensures(p, i2);
+  capacityAt_ensures(p.slots, i1);
+  capacityAt_ensures(p.slots, i2);
+}

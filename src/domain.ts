@@ -491,3 +491,52 @@ export function soldOut(p: Page): boolean {
   //@ ensures \result === forall(j, 0 <= j && j < p.slots.length ==> !hasRoom(p, j))
   return noneAvailUpto(p, p.slots.length)
 }
+
+// ── Order boundary (Stage 2b / Family D headline) ─────────────
+//
+// The precise formal sense of "Quota is Quorum inverted": the AGGREGATE
+// (per-slot count → availability/soldOut) is order-invariant under booking
+// attempts EVEN UNDER CONTENTION, while WHICH booker wins is not. So safety and
+// availability need no serialization (any order yields the same counts); only
+// *fairness* (who gets the last seat) needs the DO's total order.
+
+// keyHolds under append (companion to confirmedCountSnoc): appending b adds
+// exactly the (slot, key) it confirms to the "already holds" set.
+export function keyHoldsSnoc(bs: Booking[], b: Booking, idx: number, key: string): boolean {
+  //@ verify
+  //@ decreases bs.length
+  //@ ensures keyHolds(bs.concat([b]), idx, key) === (keyHolds(bs, idx, key) || (b.status === "confirmed" && b.slotIdx === idx && b.key === key))
+  return true
+}
+
+// The count-delta of a single booking attempt at slot s: +1 exactly when the
+// attempt is accepted (not a duplicate, has room) AND targets s; else +0.
+export function bookDelta(p: Page, idx: number, bookingId: string, key: string, seq: number, s: number): boolean {
+  //@ verify
+  //@ ensures confirmedCount(tryBook(p, idx, bookingId, key, seq).page.bookings, s) === confirmedCount(p.bookings, s) + ((!keyHolds(p.bookings, idx, key) && hasRoom(p, idx) && idx === s) ? 1 : 0)
+  return true
+}
+
+// keyHolds after a booking attempt: the (s, key) set gains (idx, key) iff the
+// attempt was accepted there.
+export function keyHoldsAfterBook(p: Page, idx: number, bookingId: string, key: string, seq: number, s: number, k: string): boolean {
+  //@ verify
+  //@ ensures keyHolds(tryBook(p, idx, bookingId, key, seq).page.bookings, s, k) === (keyHolds(p.bookings, s, k) || (!keyHolds(p.bookings, idx, key) && hasRoom(p, idx) && idx === s && key === k))
+  return true
+}
+
+// THE THEOREM: two booking attempts, applied in either order, leave every slot's
+// confirmed count identical — even when they contend for the same slot (the
+// loser is rejected either way, so the count saturates the same). This is what
+// makes availability/soldOut order-independent (so safety needs no locking),
+// while the identity of who got in is the only order-sensitive part.
+export function bookCountOrderInvariant(
+  p: Page,
+  i1: number, id1: string, k1: string, q1: number,
+  i2: number, id2: string, k2: string, q2: number,
+  s: number,
+): boolean {
+  //@ verify
+  //@ ensures confirmedCount(tryBook(tryBook(p, i1, id1, k1, q1).page, i2, id2, k2, q2).page.bookings, s) === confirmedCount(tryBook(tryBook(p, i2, id2, k2, q2).page, i1, id1, k1, q1).page.bookings, s)
+  return true
+}
