@@ -360,3 +360,74 @@ export function closeSlot(p: Page, idx: number): Page {
   //@ ensures wellFormed(\result)
   return setCapacity(p, idx, confirmedCount(p.bookings, idx))
 }
+
+// ── Op model & replay (Stage 2 / Family D) ────────────────────
+//
+// The Durable Object applies a totally-ordered log of ops — each a booking
+// attempt or a cancellation. Unlike Quorum, the order is *load-bearing*: under
+// contention, which attempts win depends on it (that's why a single serializer
+// is NECESSARY). But every reachable state is still well-formed, and the count
+// of a FIXED set of bookings is order-independent (the homomorphism below) — the
+// algebraic boundary that pins exactly where order does and doesn't matter.
+
+type Op =
+  | { kind: "book"; idx: number; bookingId: string; key: string; seq: number }
+  | { kind: "cancel"; bookingId: string }
+
+// applyOp is TOTAL — tryBook and cancelById are both safe for any args on a
+// well-formed page (a bad idx just yields "full"; an unknown id is a no-op), so
+// it composes inside replay with no precondition. It never touches the slots.
+export function applyOp(p: Page, op: Op): Page {
+  //@ verify
+  //@ ensures \result.slots === p.slots
+  if (op.kind === "book") return tryBook(p, op.idx, op.bookingId, op.key, op.seq).page
+  return { ...p, bookings: cancelById(p.bookings, op.bookingId) }
+}
+
+// Every op preserves the invariant (book by capacity safety, cancel by reverse
+// monotonicity), so no op log can ever produce an oversold page.
+export function applyOpPreservesInv(p: Page, op: Op): boolean {
+  //@ verify
+  //@ requires wellFormed(p)
+  //@ ensures wellFormed(applyOp(p, op))
+  return true
+}
+
+// replay folds a totally-ordered op log over an initial page.
+export function replay(p: Page, ops: Op[]): Page {
+  //@ verify
+  //@ decreases ops.length
+  if (ops.length === 0) return p
+  return replay(applyOp(p, ops[0]), ops.slice(1))
+}
+
+// Replay determinism is structural (a fold is a function); this is the safety
+// half: every reachable state from a well-formed page stays well-formed — so the
+// DO's stored state, and any re-export's replay, are always within capacity.
+export function replayPreservesInv(p: Page, ops: Op[]): boolean {
+  //@ verify
+  //@ requires wellFormed(p)
+  //@ decreases ops.length
+  //@ ensures wellFormed(replay(p, ops))
+  return true
+}
+
+// HOMOMORPHISM: the count of a fixed booking set is independent of how it's
+// split — counting two batches and adding equals counting the concatenation.
+// This factors the per-slot count through the commutative monoid (ℤ, +); it is
+// the formal sense in which a *fixed set* of confirmed bookings is order-free.
+export function confirmedCountConcat(xs: Booking[], ys: Booking[], idx: number): boolean {
+  //@ verify
+  //@ ensures confirmedCount(xs.concat(ys), idx) === confirmedCount(xs, idx) + confirmedCount(ys, idx)
+  return true
+}
+
+// Batch commutativity — a corollary of the homomorphism plus commutativity of
+// (+). Two batches of confirmed bookings yield the same per-slot count in either
+// order. (NB: this is about the COUNT of a fixed set; which attempts get accepted
+// under contention is still order-sensitive — that's Stage 2b.)
+export function confirmedCountComm(xs: Booking[], ys: Booking[], idx: number): boolean {
+  //@ verify
+  //@ ensures confirmedCount(xs.concat(ys), idx) === confirmedCount(ys.concat(xs), idx)
+  return true
+}

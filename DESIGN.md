@@ -173,6 +173,8 @@ quantified A1 fact. As in Quorum, the counting kernel is **total** (`confirmedCo
 precondition), so aggregation/queries compose freely; `wellFormed` is the shape the
 *mutations* preserve.
 
+> **As implemented:** `wellFormed(p) === withinCapacity(p.slots, p.bookings) && allInRange(p.bookings, p.slots.length)` — i.e. **A1 ∧ A3**. **A2 is a free corollary of A1**: since `confirmedCount ≥ 0` and A1 gives `confirmedCount(bookings, j) ≤ slots[j].capacity`, every capacity is `≥ 0` automatically, so it needn't be a separate conjunct. A3 (no phantom bookings) is *not* deferred — `addSlot` needs it (a freshly appended slot's index must start genuinely empty), so it was folded into `wellFormed` in Stage 1, and `tryBook`/`cancel` are proved to preserve it.
+
 ## 6. Architecture
 
 ```
@@ -265,8 +267,8 @@ abuse/rate-limiting/identity spoofing.
 Grouped into families and sequenced into stages. We design the model now so every family is
 reachable; we prove them in order. Spec sketches use LemmaScript syntax (`forall(k, P)`,
 `\result`, no `\old`; each `//@ ensures` becomes a *separate* `_ensures` lemma, so functions
-are **pure recursive** and the kernel is **total**). **Stages 0 + 0b (Families A, B, C) are
-implemented and verified** (`src/domain.ts`, 27 Dafny VCs, 0 errors); those specs below are the
+are **pure recursive** and the kernel is **total**). **Stages 0, 0b, 1, 2 (Families A, B, C, G,
+D-core) are implemented and verified** (`src/domain.ts`, 53 Dafny VCs, 0 errors); those specs below are the
 real ones. The remaining stages are _planned_ — their sketches are the intended specs, pinned
 during implementation.
 
@@ -475,8 +477,8 @@ function closeSlot(p: Page, idx: number): Page
 |-------|-------|----------|--------|
 | **0 — spine** | Total `holds`/`confirmedCount`/`capacityAt`/`hasRoom`; `withinCapacity`/`wellFormed`; `tryBook` (3-way `confirmed`/`duplicate`/`full`, accept-iff-room) + `tryBookPreservesInv` (capacity safety); `confirmedCountSnoc` homomorphism + `withinCapacityUpto` reflection (sound + complete) + `withinCapacityUptoAppend`. | A, B | ✅ **verified** (20 VCs, 0 errors) |
 | **0b — conservation + cancel** | `remaining` (conservation `remaining + confirmed === capacity`, `≥ 0`); `cancelById`/`cancelMonotone` (reverse monotonicity) / `cancel` (Inv-preserving). | C | ✅ **verified** (27 VCs, 0 errors) |
-| **1 — provider mutations** | `initPage`/`addSlot`/`setCapacity`/`closeSlot` preserve `Inv`; the "can't set capacity below booked" obligation. | A, G | _planned_ |
-| **2 — op model + replay** | `Op`/`applyOp`/`replay` (total) + `replayPreservesInv`; `confirmedCountConcat` count homomorphism. | D (core) | _planned_ |
+| **1 — provider mutations** | `initPage`/`addSlot`/`setCapacity`/`closeSlot` preserve `Inv`; the "can't lower capacity below booked" obligation. Also **strengthened the invariant with A3** (no phantom bookings, needed by `addSlot`) and re-proved `tryBook`/`cancel` preserve it. | A, G | ✅ **verified** (47 VCs, 0 errors) |
+| **2 — op model + replay** | `Op`/`applyOp`/`replay` (total) + `applyOpPreservesInv`/`replayPreservesInv` (every reachable state well-formed); `confirmedCountConcat` count homomorphism + `confirmedCountComm` batch commutativity. | D (core) | ✅ **verified** (53 VCs, 0 errors) |
 | **2b — order boundary** | `noContentionIsOrderFree` (under-subscription ⇒ order-free, the Quorum-regime bridge). Full permutation invariance blocked on `multiset` in specs. | D | _planned_ |
 | **3 — export + queries** | `replayRoundTrip` (E1), query-over-export soundness (E2), canonical encoding (E4); `bookersOf`/`availableSlots`/`soldOut`. | E, F | _planned_ |
 | **4 — richness (optional)** | Waitlist (rejected → FIFO queue; cancel promotes the head, capacity still safe) — adds promotion semantics + FIFO/served-≤-capacity proofs. Per-slot booking windows (open/close times) as shell + a verified "closed ⇒ no accept" guard. | (extends B/C) | _deferred_ |

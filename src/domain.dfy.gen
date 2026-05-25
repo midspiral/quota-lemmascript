@@ -12,6 +12,8 @@ datatype BookOutcome = confirmed | duplicate | full
 
 datatype BookResult = BookResult(outcome: BookOutcome, page: Page)
 
+datatype Op = book(idx: int, bookingId: string, key: string, seq_: int) | cancel(bookingId: string)
+
 function holds(b: Booking, idx: int): bool
 {
   (b.status.confirmed? && (b.slotIdx == idx))
@@ -385,5 +387,74 @@ lemma closeSlot_ensures(p: Page, idx: int)
   requires (0 <= idx)
   requires (idx < |p.slots|)
   ensures wellFormed(closeSlot(p, idx))
+{
+}
+
+function applyOp(p: Page, op: Op): Page
+{
+  match op {
+    case book(i_op_idx, i_op_bookingId, i_op_key, i_op_seq) =>
+      tryBook(p, i_op_idx, i_op_bookingId, i_op_key, i_op_seq).page
+    case cancel(i_op_bookingId) =>
+      p.(bookings := cancelById(p.bookings, i_op_bookingId))
+  }
+}
+
+lemma applyOp_ensures(p: Page, op: Op)
+  ensures (applyOp(p, op).slots == p.slots)
+{
+}
+
+function applyOpPreservesInv(p: Page, op: Op): bool
+  requires wellFormed(p)
+{
+  true
+}
+
+lemma applyOpPreservesInv_ensures(p: Page, op: Op)
+  requires wellFormed(p)
+  ensures wellFormed(applyOp(p, op))
+{
+}
+
+function replay(p: Page, ops: seq<Op>): Page
+  decreases |ops|
+{
+  if (|ops| == 0) then
+    p
+  else
+    replay(applyOp(p, ops[0]), ops[1..])
+}
+
+function replayPreservesInv(p: Page, ops: seq<Op>): bool
+  requires wellFormed(p)
+  decreases |ops|
+{
+  true
+}
+
+lemma replayPreservesInv_ensures(p: Page, ops: seq<Op>)
+  requires wellFormed(p)
+  ensures wellFormed(replay(p, ops))
+{
+}
+
+function confirmedCountConcat(xs: seq<Booking>, ys: seq<Booking>, idx: int): bool
+{
+  true
+}
+
+lemma confirmedCountConcat_ensures(xs: seq<Booking>, ys: seq<Booking>, idx: int)
+  ensures (confirmedCount((xs + ys), idx) == (confirmedCount(xs, idx) + confirmedCount(ys, idx)))
+{
+}
+
+function confirmedCountComm(xs: seq<Booking>, ys: seq<Booking>, idx: int): bool
+{
+  true
+}
+
+lemma confirmedCountComm_ensures(xs: seq<Booking>, ys: seq<Booking>, idx: int)
+  ensures (confirmedCount((xs + ys), idx) == confirmedCount((ys + xs), idx))
 {
 }

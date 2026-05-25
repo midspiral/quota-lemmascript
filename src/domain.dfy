@@ -12,6 +12,8 @@ datatype BookOutcome = confirmed | duplicate | full
 
 datatype BookResult = BookResult(outcome: BookOutcome, page: Page)
 
+datatype Op = book(idx: int, bookingId: string, key: string, seq_: int) | cancel(bookingId: string)
+
 function holds(b: Booking, idx: int): bool
 {
   (b.status.confirmed? && (b.slotIdx == idx))
@@ -521,4 +523,99 @@ lemma closeSlot_ensures(p: Page, idx: int)
   // --- proof: closeSlot is setCapacity to the current count, so its precondition
   // (newCap >= booked count) holds with equality. ---
   setCapacity_ensures(p, idx, confirmedCount(p.bookings, idx));
+}
+
+function applyOp(p: Page, op: Op): Page
+{
+  match op {
+    case book(i_op_idx, i_op_bookingId, i_op_key, i_op_seq) =>
+      tryBook(p, i_op_idx, i_op_bookingId, i_op_key, i_op_seq).page
+    case cancel(i_op_bookingId) =>
+      p.(bookings := cancelById(p.bookings, i_op_bookingId))
+  }
+}
+
+lemma applyOp_ensures(p: Page, op: Op)
+  ensures (applyOp(p, op).slots == p.slots)
+{
+}
+
+function applyOpPreservesInv(p: Page, op: Op): bool
+  requires wellFormed(p)
+{
+  true
+}
+
+lemma applyOpPreservesInv_ensures(p: Page, op: Op)
+  requires wellFormed(p)
+  ensures wellFormed(applyOp(p, op))
+{
+  // --- proof: case on the op. book is capacity-safe (tryBookPreservesInv);
+  // cancel is exactly `cancel`, which preserves Inv by reverse monotonicity. ---
+  if (op.book?) {
+    tryBookPreservesInv_ensures(p, op.idx, op.bookingId, op.key, op.seq_);
+  } else {
+    cancel_ensures(p, op.bookingId);
+    assert applyOp(p, op) == cancel(p, op.bookingId);
+  }
+}
+
+function replay(p: Page, ops: seq<Op>): Page
+  decreases |ops|
+{
+  if (|ops| == 0) then
+    p
+  else
+    replay(applyOp(p, ops[0]), ops[1..])
+}
+
+function replayPreservesInv(p: Page, ops: seq<Op>): bool
+  requires wellFormed(p)
+  decreases |ops|
+{
+  true
+}
+
+lemma replayPreservesInv_ensures(p: Page, ops: seq<Op>)
+  requires wellFormed(p)
+  decreases |ops|
+  ensures wellFormed(replay(p, ops))
+{
+  // --- proof: induction on the op log; the head preserves Inv (applyOp), so the
+  // IH applies to the tail from the new well-formed state. ---
+  if (|ops| != 0) {
+    applyOpPreservesInv_ensures(p, ops[0]);
+    replayPreservesInv_ensures(applyOp(p, ops[0]), ops[1..]);
+  }
+}
+
+function confirmedCountConcat(xs: seq<Booking>, ys: seq<Booking>, idx: int): bool
+{
+  true
+}
+
+lemma confirmedCountConcat_ensures(xs: seq<Booking>, ys: seq<Booking>, idx: int)
+  ensures (confirmedCount((xs + ys), idx) == (confirmedCount(xs, idx) + confirmedCount(ys, idx)))
+{
+  // --- proof: induction on xs; (xs+ys)[0]==xs[0], (xs+ys)[1..]==xs[1..]+ys ---
+  if (|xs| != 0) {
+    assert (xs + ys)[1..] == xs[1..] + ys;
+    confirmedCountConcat_ensures(xs[1..], ys, idx);
+  } else {
+    assert (xs + ys) == ys;
+  }
+}
+
+function confirmedCountComm(xs: seq<Booking>, ys: seq<Booking>, idx: int): bool
+{
+  true
+}
+
+lemma confirmedCountComm_ensures(xs: seq<Booking>, ys: seq<Booking>, idx: int)
+  ensures (confirmedCount((xs + ys), idx) == confirmedCount((ys + xs), idx))
+{
+  // --- proof: both sides equal confirmedCount(xs)+confirmedCount(ys) by the
+  // homomorphism, and integer addition commutes. ---
+  confirmedCountConcat_ensures(xs, ys, idx);
+  confirmedCountConcat_ensures(ys, xs, idx);
 }

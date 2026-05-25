@@ -1,6 +1,10 @@
 // Runtime smoke for the verified core (Node strips the TS types).
 //   node test/smoke.ts
-import { tryBook, cancel, remaining, wellFormed, confirmedCount, hasRoom, type Page } from "../src/domain.ts"
+import {
+  tryBook, cancel, remaining, wellFormed, confirmedCount, hasRoom,
+  initPage, addSlot, setCapacity, closeSlot, capacityAt,
+  replay, type Page, type Op,
+} from "../src/domain.ts"
 
 let failures = 0
 function check(cond: boolean, msg: string): void {
@@ -61,6 +65,50 @@ check(remaining(p6, 1) === 0, "slot 1 still full (remaining 0)")
 const r7 = tryBook(p6, 0, "bk7", "bob", 7)
 check(r7.outcome === "confirmed", "a freed slot is bookable again")
 check(wellFormed(r7.page), "well-formed after re-booking the freed slot")
+
+// ── Provider mutations (Stage 1) ──────────────────────────────
+
+// Build a page the verified way; a class with 3 seats = one slot of capacity 3.
+let g = initPage("g1", "Group class", [{ label: "Sat 10am", capacity: 3 }])
+check(wellFormed(g), "initPage is well-formed")
+
+// Provider appends a second slot after publishing.
+g = addSlot(g, "Sat 11am", 1)
+check(wellFormed(g) && g.slots.length === 2, "addSlot appends an in-range, empty slot")
+
+// Two people grab the 3-seat slot; one seat left.
+g = tryBook(g, 0, "g-bk1", "u1", 1).page
+g = tryBook(g, 0, "g-bk2", "u2", 2).page
+check(confirmedCount(g.bookings, 0) === 2 && remaining(g, 0) === 1, "2 of 3 seats taken")
+
+// Provider lowers capacity to exactly what's booked (a "close"): no oversell.
+g = setCapacity(g, 0, 2)
+check(wellFormed(g) && capacityAt(g.slots, 0) === 2, "setCapacity down to the booked count")
+check(!hasRoom(g, 0), "the just-capped slot now has no room")
+
+// closeSlot caps slot 1 (0 booked) at 0 — well-formed, and shut to new bookings.
+g = closeSlot(g, 1)
+check(wellFormed(g) && capacityAt(g.slots, 1) === 0, "closeSlot caps an empty slot at 0")
+check(tryBook(g, 1, "g-bk3", "u3", 3).outcome === "full", "a closed slot rejects bookings")
+
+// ── Op log & replay (Stage 2) ─────────────────────────────────
+
+// The DO's authoritative model is replay over a totally-ordered op log. A
+// contended slot (capacity 1) with two booking ops + a cancel: first wins,
+// second is a no-op (full), then the first cancels — leaving the slot free.
+const base = initPage("r1", "Replay demo", [{ label: "Only seat", capacity: 1 }])
+const log: Op[] = [
+  { kind: "book", idx: 0, bookingId: "r-bk1", key: "x", seq: 1 },
+  { kind: "book", idx: 0, bookingId: "r-bk2", key: "y", seq: 2 }, // loses the race -> no-op
+  { kind: "cancel", bookingId: "r-bk1" },
+]
+const rp = replay(base, log)
+check(wellFormed(rp), "replayed page is well-formed (never oversold)")
+check(confirmedCount(rp.bookings, 0) === 0, "winner cancelled -> slot free again")
+
+// Re-running the same log over the same start is deterministic (audit/export).
+const rp2 = replay(base, log)
+check(confirmedCount(rp2.bookings, 0) === confirmedCount(rp.bookings, 0), "replay is deterministic")
 
 if (failures === 0) {
   console.log("\nAll smoke checks passed.")
