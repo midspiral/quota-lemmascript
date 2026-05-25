@@ -114,7 +114,7 @@ function withinCapacity(slots: seq<Slot>, bs: seq<Booking>): bool
 
 function wellFormed(p: Page): bool
 {
-  withinCapacity(p.slots, p.bookings)
+  (withinCapacity(p.slots, p.bookings) && allInRange(p.bookings, |p.slots|))
 }
 
 function confirmedCountSnoc(bs: seq<Booking>, b: Booking, idx: int): bool
@@ -233,5 +233,157 @@ lemma remaining_ensures(p: Page, idx: int)
   requires (idx < |p.slots|)
   ensures ((remaining(p, idx) + confirmedCount(p.bookings, idx)) == capacityAt(p.slots, idx))
   ensures (remaining(p, idx) >= 0)
+{
+}
+
+function allInRange(bs: seq<Booking>, n: int): bool
+  decreases |bs|
+{
+  ((|bs| == 0) || (if (bs[0].slotIdx < 0) then false else (if (bs[0].slotIdx >= n) then false else allInRange(bs[1..], n))))
+}
+
+lemma allInRange_ensures(bs: seq<Booking>, n: int)
+  ensures ((allInRange(bs, n) == true) ==> forall i: int :: ((0 <= i) ==> (i < |bs|) ==> ((0 <= bs[i].slotIdx) && (bs[i].slotIdx < n))))
+{
+}
+
+function allInRangeSnoc(bs: seq<Booking>, b: Booking, n: int): bool
+  requires allInRange(bs, n)
+  requires (0 <= b.slotIdx)
+  requires (b.slotIdx < n)
+  decreases |bs|
+{
+  true
+}
+
+lemma allInRangeSnoc_ensures(bs: seq<Booking>, b: Booking, n: int)
+  requires allInRange(bs, n)
+  requires (0 <= b.slotIdx)
+  requires (b.slotIdx < n)
+  ensures allInRange((bs + [b]), n)
+{
+}
+
+function allInRangeCancel(bs: seq<Booking>, bookingId: string, n: int): bool
+  requires allInRange(bs, n)
+  decreases |bs|
+{
+  true
+}
+
+lemma allInRangeCancel_ensures(bs: seq<Booking>, bookingId: string, n: int)
+  requires allInRange(bs, n)
+  ensures allInRange(cancelById(bs, bookingId), n)
+{
+}
+
+function allInRangeWiden(bs: seq<Booking>, n: int, m: int): bool
+  requires allInRange(bs, n)
+  requires (n <= m)
+  decreases |bs|
+{
+  true
+}
+
+lemma allInRangeWiden_ensures(bs: seq<Booking>, n: int, m: int)
+  requires allInRange(bs, n)
+  requires (n <= m)
+  ensures allInRange(bs, m)
+{
+}
+
+function countZeroAtUnbooked(bs: seq<Booking>, n: int, idx: int): bool
+  requires allInRange(bs, n)
+  requires (idx >= n)
+  decreases |bs|
+{
+  true
+}
+
+lemma countZeroAtUnbooked_ensures(bs: seq<Booking>, n: int, idx: int)
+  requires allInRange(bs, n)
+  requires (idx >= n)
+  ensures (confirmedCount(bs, idx) == 0)
+{
+}
+
+function initPage(id: string, title: string, slots: seq<Slot>): Page
+  requires forall j: int :: ((0 <= j) ==> (j < |slots|) ==> (slots[j].capacity >= 0))
+{
+  Page(id, title, slots, [])
+}
+
+lemma initPage_ensures(id: string, title: string, slots: seq<Slot>)
+  requires forall j: int :: ((0 <= j) ==> (j < |slots|) ==> (slots[j].capacity >= 0))
+  ensures wellFormed(initPage(id, title, slots))
+  ensures (initPage(id, title, slots).slots == slots)
+{
+}
+
+function addSlot(p: Page, label_: string, newCap: int): Page
+  requires wellFormed(p)
+  requires (newCap >= 0)
+{
+  p.(slots := (p.slots + [Slot(label_, newCap)]))
+}
+
+lemma addSlot_ensures(p: Page, label_: string, newCap: int)
+  requires wellFormed(p)
+  requires (newCap >= 0)
+  ensures wellFormed(addSlot(p, label_, newCap))
+{
+}
+
+function setCapAt(slots: seq<Slot>, idx: int, newCap: int): seq<Slot>
+  decreases |slots|
+{
+  if (|slots| == 0) then
+    []
+  else
+    if (idx == 0) then
+      ([slots[0].(capacity := newCap)] + slots[1..])
+    else
+      ([slots[0]] + setCapAt(slots[1..], (idx - 1), newCap))
+}
+
+lemma setCapAt_ensures(slots: seq<Slot>, idx: int, newCap: int)
+  ensures (|setCapAt(slots, idx, newCap)| == |slots|)
+  ensures forall j: int :: ((0 <= j) ==> (j < |slots|) ==> (j != idx) ==> (setCapAt(slots, idx, newCap)[j] == slots[j]))
+  ensures ((0 <= idx) ==> (idx < |slots|) ==> (setCapAt(slots, idx, newCap)[idx].capacity == newCap))
+{
+}
+
+function setCapacity(p: Page, idx: int, newCap: int): Page
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+  requires (newCap >= confirmedCount(p.bookings, idx))
+{
+  p.(slots := setCapAt(p.slots, idx, newCap))
+}
+
+lemma setCapacity_ensures(p: Page, idx: int, newCap: int)
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+  requires (newCap >= confirmedCount(p.bookings, idx))
+  ensures wellFormed(setCapacity(p, idx, newCap))
+  ensures (|setCapacity(p, idx, newCap).slots| == |p.slots|)
+{
+}
+
+function closeSlot(p: Page, idx: int): Page
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+{
+  setCapacity(p, idx, confirmedCount(p.bookings, idx))
+}
+
+lemma closeSlot_ensures(p: Page, idx: int)
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+  ensures wellFormed(closeSlot(p, idx))
 {
 }

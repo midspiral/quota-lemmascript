@@ -124,7 +124,7 @@ function withinCapacity(slots: seq<Slot>, bs: seq<Booking>): bool
 
 function wellFormed(p: Page): bool
 {
-  withinCapacity(p.slots, p.bookings)
+  (withinCapacity(p.slots, p.bookings) && allInRange(p.bookings, |p.slots|))
 }
 
 function confirmedCountSnoc(bs: seq<Booking>, b: Booking, idx: int): bool
@@ -209,7 +209,8 @@ lemma tryBookPreservesInv_ensures(p: Page, idx: int, bookingId: string, key: str
     var b := Booking(bookingId, idx, key, BookingStatus.confirmed, seq_);
     hasRoom_ensures(p, idx);             // 0<=idx<|slots| && cc(bookings,idx) < capacityAt(slots,idx)
     capacityAt_ensures(p.slots, idx);    // capacityAt(slots,idx) == slots[idx].capacity (in range)
-    withinCapacityUptoAppend_ensures(p.slots, p.bookings, b, |p.slots|);
+    withinCapacityUptoAppend_ensures(p.slots, p.bookings, b, |p.slots|);  // A1
+    allInRangeSnoc_ensures(p.bookings, b, |p.slots|);                      // A3 (b.slotIdx == idx in range)
   }
 }
 
@@ -272,7 +273,8 @@ lemma cancel_ensures(p: Page, bookingId: string)
   {
     cancelMonotone_ensures(p.bookings, bookingId, j);
   }
-  withinCapacityUptoComplete_ensures(p.slots, nb, |p.slots|);
+  withinCapacityUptoComplete_ensures(p.slots, nb, |p.slots|);  // A1
+  allInRangeCancel_ensures(p.bookings, bookingId, |p.slots|);  // A3 (status flip keeps slotIdx)
 }
 
 function remaining(p: Page, idx: int): int
@@ -294,4 +296,229 @@ lemma remaining_ensures(p: Page, idx: int)
   // confirmed count by the slot's capacity (sound reflection at j == idx). ---
   withinCapacityUpto_ensures(p.slots, p.bookings, |p.slots|);
   capacityAt_ensures(p.slots, idx);
+}
+
+function allInRange(bs: seq<Booking>, n: int): bool
+  decreases |bs|
+{
+  ((|bs| == 0) || (if (bs[0].slotIdx < 0) then false else (if (bs[0].slotIdx >= n) then false else allInRange(bs[1..], n))))
+}
+
+lemma allInRange_ensures(bs: seq<Booking>, n: int)
+  ensures ((allInRange(bs, n) == true) ==> forall i: int :: ((0 <= i) ==> (i < |bs|) ==> ((0 <= bs[i].slotIdx) && (bs[i].slotIdx < n))))
+{
+  // --- proof: induction on bs (bs[1..][i] == bs[i+1]) ---
+  if (|bs| != 0) {
+    allInRange_ensures(bs[1..], n);
+  }
+}
+
+function allInRangeSnoc(bs: seq<Booking>, b: Booking, n: int): bool
+  requires allInRange(bs, n)
+  requires (0 <= b.slotIdx)
+  requires (b.slotIdx < n)
+  decreases |bs|
+{
+  true
+}
+
+lemma allInRangeSnoc_ensures(bs: seq<Booking>, b: Booking, n: int)
+  requires allInRange(bs, n)
+  requires (0 <= b.slotIdx)
+  requires (b.slotIdx < n)
+  ensures allInRange((bs + [b]), n)
+{
+  // --- proof: induction on bs; (bs+[b])[1..] == bs[1..]+[b] ---
+  if (|bs| != 0) {
+    assert (bs + [b])[1..] == bs[1..] + [b];
+    allInRangeSnoc_ensures(bs[1..], b, n);
+  } else {
+    assert (bs + [b]) == [b];
+  }
+}
+
+function allInRangeCancel(bs: seq<Booking>, bookingId: string, n: int): bool
+  requires allInRange(bs, n)
+  decreases |bs|
+{
+  true
+}
+
+lemma allInRangeCancel_ensures(bs: seq<Booking>, bookingId: string, n: int)
+  requires allInRange(bs, n)
+  ensures allInRange(cancelById(bs, bookingId), n)
+{
+  // --- proof: induction on bs. A status flip preserves slotIdx, so the matched
+  // head stays in range; other rows recurse by the IH. ---
+  if (|bs| != 0) {
+    if (bs[0].id == bookingId) {
+      assert ([bs[0].(status := BookingStatus.cancelled)] + bs[1..])[1..] == bs[1..];
+    } else {
+      assert ([bs[0]] + cancelById(bs[1..], bookingId))[1..] == cancelById(bs[1..], bookingId);
+      allInRangeCancel_ensures(bs[1..], bookingId, n);
+    }
+  }
+}
+
+function allInRangeWiden(bs: seq<Booking>, n: int, m: int): bool
+  requires allInRange(bs, n)
+  requires (n <= m)
+  decreases |bs|
+{
+  true
+}
+
+lemma allInRangeWiden_ensures(bs: seq<Booking>, n: int, m: int)
+  requires allInRange(bs, n)
+  requires (n <= m)
+  ensures allInRange(bs, m)
+{
+  // --- proof: induction on bs; each slotIdx < n <= m ---
+  if (|bs| != 0) {
+    allInRangeWiden_ensures(bs[1..], n, m);
+  }
+}
+
+function countZeroAtUnbooked(bs: seq<Booking>, n: int, idx: int): bool
+  requires allInRange(bs, n)
+  requires (idx >= n)
+  decreases |bs|
+{
+  true
+}
+
+lemma countZeroAtUnbooked_ensures(bs: seq<Booking>, n: int, idx: int)
+  requires allInRange(bs, n)
+  requires (idx >= n)
+  ensures (confirmedCount(bs, idx) == 0)
+{
+  // --- proof: induction on bs; each slotIdx < n <= idx, so no row holds idx ---
+  if (|bs| != 0) {
+    countZeroAtUnbooked_ensures(bs[1..], n, idx);
+  }
+}
+
+function initPage(id: string, title: string, slots: seq<Slot>): Page
+  requires forall j: int :: ((0 <= j) ==> (j < |slots|) ==> (slots[j].capacity >= 0))
+{
+  Page(id, title, slots, [])
+}
+
+lemma initPage_ensures(id: string, title: string, slots: seq<Slot>)
+  requires forall j: int :: ((0 <= j) ==> (j < |slots|) ==> (slots[j].capacity >= 0))
+  ensures wellFormed(initPage(id, title, slots))
+  ensures (initPage(id, title, slots).slots == slots)
+{
+  // --- proof: empty bookings ⇒ every count is 0 <= capacity (caps >= 0), and
+  // allInRange([], _) is vacuously true. ---
+  withinCapacityUptoComplete_ensures(slots, [], |slots|);
+}
+
+function addSlot(p: Page, label_: string, newCap: int): Page
+  requires wellFormed(p)
+  requires (newCap >= 0)
+{
+  p.(slots := (p.slots + [Slot(label_, newCap)]))
+}
+
+lemma addSlot_ensures(p: Page, label_: string, newCap: int)
+  requires wellFormed(p)
+  requires (newCap >= 0)
+  ensures wellFormed(addSlot(p, label_, newCap))
+{
+  // --- proof: the new slot at index |p.slots| starts empty (countZeroAtUnbooked
+  // via A3), so it's within its capacity (newCap >= 0); every existing slot is
+  // unchanged; and A3 widens to the larger slot count. ---
+  var ns := p.slots + [Slot(label_, newCap)];
+  withinCapacityUpto_ensures(p.slots, p.bookings, |p.slots|);
+  countZeroAtUnbooked_ensures(p.bookings, |p.slots|, |p.slots|);
+  forall j: int | (0 <= j < |ns|)
+    ensures confirmedCount(p.bookings, j) <= ns[j].capacity
+  {
+    if (j < |p.slots|) {
+      assert ns[j] == p.slots[j];
+    } else {
+      assert ns[j].capacity == newCap;
+    }
+  }
+  withinCapacityUptoComplete_ensures(ns, p.bookings, |ns|);
+  allInRangeWiden_ensures(p.bookings, |p.slots|, |ns|);
+}
+
+function setCapAt(slots: seq<Slot>, idx: int, newCap: int): seq<Slot>
+  decreases |slots|
+{
+  if (|slots| == 0) then
+    []
+  else
+    if (idx == 0) then
+      ([slots[0].(capacity := newCap)] + slots[1..])
+    else
+      ([slots[0]] + setCapAt(slots[1..], (idx - 1), newCap))
+}
+
+lemma setCapAt_ensures(slots: seq<Slot>, idx: int, newCap: int)
+  ensures (|setCapAt(slots, idx, newCap)| == |slots|)
+  ensures forall j: int :: ((0 <= j) ==> (j < |slots|) ==> (j != idx) ==> (setCapAt(slots, idx, newCap)[j] == slots[j]))
+  ensures ((0 <= idx) ==> (idx < |slots|) ==> (setCapAt(slots, idx, newCap)[idx].capacity == newCap))
+{
+  // --- proof: induction on slots; for idx>0 the head is kept and the tail
+  // recurses ([slots[0]]+rec)[1..] == rec, shifting the index by one. ---
+  if (|slots| != 0 && idx != 0) {
+    assert ([slots[0]] + setCapAt(slots[1..], idx - 1, newCap))[1..] == setCapAt(slots[1..], idx - 1, newCap);
+    setCapAt_ensures(slots[1..], idx - 1, newCap);
+  }
+}
+
+function setCapacity(p: Page, idx: int, newCap: int): Page
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+  requires (newCap >= confirmedCount(p.bookings, idx))
+{
+  p.(slots := setCapAt(p.slots, idx, newCap))
+}
+
+lemma setCapacity_ensures(p: Page, idx: int, newCap: int)
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+  requires (newCap >= confirmedCount(p.bookings, idx))
+  ensures wellFormed(setCapacity(p, idx, newCap))
+  ensures (|setCapacity(p, idx, newCap).slots| == |p.slots|)
+{
+  // --- proof: slot idx gets newCap >= its booked count; every other slot is
+  // unchanged (within capacity by the old invariant); bookings are untouched so
+  // A3 carries over (same slot count). ---
+  var ns := setCapAt(p.slots, idx, newCap);
+  setCapAt_ensures(p.slots, idx, newCap);
+  withinCapacityUpto_ensures(p.slots, p.bookings, |p.slots|);
+  forall j: int | (0 <= j < |p.slots|)
+    ensures confirmedCount(p.bookings, j) <= ns[j].capacity
+  {
+    if (j != idx) {
+      assert ns[j] == p.slots[j];
+    }
+  }
+  withinCapacityUptoComplete_ensures(ns, p.bookings, |ns|);
+  allInRangeWiden_ensures(p.bookings, |p.slots|, |ns|);
+}
+
+function closeSlot(p: Page, idx: int): Page
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+{
+  setCapacity(p, idx, confirmedCount(p.bookings, idx))
+}
+
+lemma closeSlot_ensures(p: Page, idx: int)
+  requires wellFormed(p)
+  requires (0 <= idx)
+  requires (idx < |p.slots|)
+  ensures wellFormed(closeSlot(p, idx))
+{
+  // --- proof: closeSlot is setCapacity to the current count, so its precondition
+  // (newCap >= booked count) holds with equality. ---
+  setCapacity_ensures(p, idx, confirmedCount(p.bookings, idx));
 }

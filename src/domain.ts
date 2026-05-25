@@ -146,7 +146,7 @@ export function withinCapacity(slots: Slot[], bs: Booking[]): boolean {
 
 export function wellFormed(p: Page): boolean {
   //@ verify
-  return withinCapacity(p.slots, p.bookings)
+  return withinCapacity(p.slots, p.bookings) && allInRange(p.bookings, p.slots.length)
 }
 
 // ── The booking decision (Family B) ───────────────────────────
@@ -243,4 +243,120 @@ export function remaining(p: Page, idx: number): number {
   //@ ensures \result + confirmedCount(p.bookings, idx) === capacityAt(p.slots, idx)
   //@ ensures \result >= 0
   return capacityAt(p.slots, idx) - confirmedCount(p.bookings, idx)
+}
+
+// ── Booking-index well-formedness (A3) ────────────────────────
+//
+// A3: every booking targets a real slot. Folded into `wellFormed` so the mutations
+// can rely on "no phantom bookings" — in particular so a freshly added slot starts
+// genuinely empty. The reflection lemma hands a caller the quantified fact.
+
+export function allInRange(bs: Booking[], n: number): boolean {
+  //@ verify
+  //@ decreases bs.length
+  //@ ensures \result === true ==> forall(i, 0 <= i && i < bs.length ==> 0 <= bs[i].slotIdx && bs[i].slotIdx < n)
+  if (bs.length === 0) return true
+  if (bs[0].slotIdx < 0) return false
+  if (bs[0].slotIdx >= n) return false
+  return allInRange(bs.slice(1), n)
+}
+
+// Appending an in-range booking preserves A3.
+export function allInRangeSnoc(bs: Booking[], b: Booking, n: number): boolean {
+  //@ verify
+  //@ requires allInRange(bs, n)
+  //@ requires 0 <= b.slotIdx && b.slotIdx < n
+  //@ decreases bs.length
+  //@ ensures allInRange(bs.concat([b]), n)
+  return true
+}
+
+// Cancelling flips a status, never a slotIdx, so A3 survives a cancellation.
+export function allInRangeCancel(bs: Booking[], bookingId: string, n: number): boolean {
+  //@ verify
+  //@ requires allInRange(bs, n)
+  //@ decreases bs.length
+  //@ ensures allInRange(cancelById(bs, bookingId), n)
+  return true
+}
+
+// A3 widens: in range for n stays in range for any m >= n (used when a slot is added).
+export function allInRangeWiden(bs: Booking[], n: number, m: number): boolean {
+  //@ verify
+  //@ requires allInRange(bs, n)
+  //@ requires n <= m
+  //@ decreases bs.length
+  //@ ensures allInRange(bs, m)
+  return true
+}
+
+// If every booking targets [0, n), nothing holds an index >= n, so its count is 0.
+// (A freshly added slot at index n starts genuinely empty.)
+export function countZeroAtUnbooked(bs: Booking[], n: number, idx: number): boolean {
+  //@ verify
+  //@ requires allInRange(bs, n)
+  //@ requires idx >= n
+  //@ decreases bs.length
+  //@ ensures confirmedCount(bs, idx) === 0
+  return true
+}
+
+// ── Provider mutations (Stage 1 / Family G) ───────────────────
+//
+// Slots are append-only: a provider creates a page, appends slots, raises/lowers
+// capacity (never below what's booked), and "closes" a slot by capping it to its
+// current count. Every mutation preserves the no-overbooking invariant.
+
+// A fresh page: given slots (capacities >= 0) and no bookings — well-formed
+// vacuously (every count is 0; no booking out of range).
+export function initPage(id: string, title: string, slots: Slot[]): Page {
+  //@ verify
+  //@ requires forall(j, 0 <= j && j < slots.length ==> slots[j].capacity >= 0)
+  //@ ensures wellFormed(\result)
+  //@ ensures \result.slots === slots
+  return { id: id, title: title, slots: slots, bookings: [] }
+}
+
+// Append a new slot (capacity >= 0). It starts empty — no booking referenced the
+// new index (A3) — so it's within capacity and the page stays well-formed.
+export function addSlot(p: Page, label: string, newCap: number): Page {
+  //@ verify
+  //@ requires wellFormed(p)
+  //@ requires newCap >= 0
+  //@ ensures wellFormed(\result)
+  return { ...p, slots: [...p.slots, { label: label, capacity: newCap }] }
+}
+
+// Replace the capacity of slot `idx`, leaving every other slot untouched.
+export function setCapAt(slots: Slot[], idx: number, newCap: number): Slot[] {
+  //@ verify
+  //@ decreases slots.length
+  //@ ensures \result.length === slots.length
+  //@ ensures forall(j, 0 <= j && j < slots.length && j !== idx ==> \result[j] === slots[j])
+  //@ ensures (0 <= idx && idx < slots.length) ==> \result[idx].capacity === newCap
+  if (slots.length === 0) return []
+  if (idx === 0) return [{ ...slots[0], capacity: newCap }, ...slots.slice(1)]
+  return [slots[0], ...setCapAt(slots.slice(1), idx - 1, newCap)]
+}
+
+// Set a slot's capacity. Lowering is allowed ONLY down to what's already booked,
+// so a page can never be made retroactively oversold.
+export function setCapacity(p: Page, idx: number, newCap: number): Page {
+  //@ verify
+  //@ requires wellFormed(p)
+  //@ requires 0 <= idx && idx < p.slots.length
+  //@ requires newCap >= confirmedCount(p.bookings, idx)
+  //@ ensures wellFormed(\result)
+  //@ ensures \result.slots.length === p.slots.length
+  return { ...p, slots: setCapAt(p.slots, idx, newCap) }
+}
+
+// Close a slot to new bookings: cap it at its current confirmed count. The
+// precondition of setCapacity holds trivially (count >= count), so it's safe.
+export function closeSlot(p: Page, idx: number): Page {
+  //@ verify
+  //@ requires wellFormed(p)
+  //@ requires 0 <= idx && idx < p.slots.length
+  //@ ensures wellFormed(\result)
+  return setCapacity(p, idx, confirmedCount(p.bookings, idx))
 }
