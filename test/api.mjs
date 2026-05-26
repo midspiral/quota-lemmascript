@@ -23,9 +23,9 @@ async function jget(path, token) {
   const r = await fetch(BASE + path, { headers: token ? { authorization: `Bearer ${token}` } : {} })
   return { status: r.status, data: await r.json().catch(() => null) }
 }
-async function signIn(email, name) {
-  const req = await jpost("/api/auth/request", { email, name })
-  const token = req.data.devLink.split("token=")[1].split("&")[0] // devLink now carries &returnTo
+async function signIn(email) {
+  const req = await jpost("/api/auth/request", { email })
+  const token = req.data.devLink.split("token=")[1].split("&")[0] // devLink carries &returnTo
   const ver = await jpost("/api/auth/verify", { token })
   return ver.data
 }
@@ -37,10 +37,16 @@ const samHandle = `sam${r}`
 const slug = `yoga${r}`
 const bobEmail = `bob${r}@example.com`
 
-// 1. sign in (magic link round-trip) + handle claim
-const sam = await signIn(samEmail, "Sam")
+// 1. sign in (email-only magic link round-trip) + handle claim
+const sam = await signIn(samEmail)
 if (sam.session?.handle === samHandle) ok(`sign-in works; handle claimed (${samHandle})`)
 else fail(`sign-in/handle: ${JSON.stringify(sam)}`)
+
+// 1b. set display name via the profile endpoint, then read it back
+await jpost("/api/account", { name: "Sam" }, sam.token)
+const acct = await jget("/api/account", sam.token)
+if (acct.data?.name === "Sam") ok("profile: set + get display name")
+else fail(`account: ${JSON.stringify(acct)}`)
 
 // 2. create a page (capacity-1 slot) via D1 registry + DO init
 const created = await jpost("/api/pages", { pagename: slug, title: "Yoga", slots: [{ label: "Mon 9", capacity: 1 }] }, sam.token)
@@ -64,7 +70,7 @@ if (b2.data?.outcome === "duplicate") ok("same-account re-book → duplicate")
 else fail(`book2: ${JSON.stringify(b2)}`)
 
 // 6. bob contends for the full seat → full (capacity safety in the DO)
-const bob = await signIn(bobEmail, "Bob")
+const bob = await signIn(bobEmail)
 const b3 = await jpost(`/api/pages/${pageId}/book`, { slotIdx: 0 }, bob.token)
 if (b3.data?.outcome === "full") ok("contending booker on a full slot → full (never oversold)")
 else fail(`book3: ${JSON.stringify(b3)}`)

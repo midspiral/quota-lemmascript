@@ -31,23 +31,17 @@ const stytchCfg = (env: Env): StytchConfig => ({
   apiUrl: env.STYTCH_API_URL,
 })
 
-async function upsertAccount(env: Env, email: string, name: string): Promise<void> {
-  await env.DB.prepare("INSERT INTO accounts (email, name) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET name = excluded.name")
-    .bind(email, name)
-    .run()
-}
-
 // Mint our own session (handle claim + HMAC bearer), shared by both auth paths.
-async function issueSession(env: Env, email: string, name: string): Promise<Response> {
+// Sign-in is email-only; the display name is a separate profile setting (accounts).
+async function issueSession(env: Env, email: string): Promise<Response> {
   const handle = await claimHandle(env, email)
-  const session = { email, name, handle }
+  const session: Session = { email, handle }
   const token = await makeToken({ k: "s", ...session }, env.AUTH_SECRET, 60 * 60 * 24 * 30)
   return json({ session, token })
 }
 
 interface Session {
   email: string
-  name: string
   handle: string
 }
 
@@ -95,7 +89,7 @@ async function sessionFrom(req: Request, env: Env): Promise<Session | null> {
   if (token === "") return null
   const p = await readToken(token, env.AUTH_SECRET)
   if (p === null || p.k !== "s") return null
-  return { email: String(p.email), name: String(p.name), handle: String(p.handle) }
+  return { email: String(p.email), handle: String(p.handle) }
 }
 
 // ── D1 registry ───────────────────────────────────────────────
@@ -137,25 +131,21 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
   const parts = url.pathname.replace(/^\/api\//, "").split("/").filter(Boolean)
   const method = req.method
 
-  // --- auth ---
+  // --- auth (email only; display name is a separate profile setting) ---
   if (parts[0] === "auth" && parts[1] === "request" && method === "POST") {
-    const { email, name, returnTo } = (await req.json()) as { email?: string; name?: string; returnTo?: string }
-    if (!email || !email.includes("@") || !name) return bad("name and email required")
+    const { email, returnTo } = (await req.json()) as { email?: string; returnTo?: string }
+    if (!email || !email.includes("@")) return bad("email required")
     const rt = encodeURIComponent(typeof returnTo === "string" && returnTo !== "" ? returnTo : "/")
     const cfg = stytchCfg(env)
     if (stytchEnabled(cfg)) {
-      // Stytch sends the email; remember the name now (its callback won't carry it).
-      await upsertAccount(env, email, name)
-      const origin = new URL(req.url).origin
       // Bare root URL — Stytch validates redirect URLs strictly (extra query params
-      // are rejected), and it appends its own ?token=…&stytch_token_type=… . The SPA
-      // completes sign-in from those, reading returnTo from localStorage (stashed by
-      // RemoteAuth before the round-trip).
+      // rejected) and appends its own ?token=…&stytch_token_type=… for the SPA.
+      const origin = new URL(req.url).origin
       const ok = await stytchSendMagicLink(cfg, email, `${origin}/`)
       return ok ? json({ sent: true }) : bad("could not send the sign-in email", 502)
     }
     // Keyless dev fallback: our own HMAC link, surfaced in the response.
-    const token = await makeToken({ k: "ml", email, name }, env.AUTH_SECRET, 900)
+    const token = await makeToken({ k: "ml", email }, env.AUTH_SECRET, 900)
     return json({ devLink: `#/auth?token=${token}&returnTo=${rt}` })
   }
   if (parts[0] === "auth" && parts[1] === "verify" && method === "POST") {
@@ -165,19 +155,32 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
     if (stytchEnabled(cfg)) {
       const r = await stytchAuthenticate(cfg, token)
       if (r === null) return bad("invalid or expired link", 401)
-      const acc = await env.DB.prepare("SELECT name FROM accounts WHERE email = ?").bind(r.email).first<{ name: string }>()
-      return issueSession(env, r.email, acc?.name ?? r.email)
+      return issueSession(env, r.email)
     }
     const p = await readToken(token, env.AUTH_SECRET)
     if (p === null || p.k !== "ml") return bad("invalid or expired link", 401)
-    const email = String(p.email)
-    const name = String(p.name)
-    await upsertAccount(env, email, name)
-    return issueSession(env, email, name)
+    return issueSession(env, String(p.email))
   }
   if (parts[0] === "auth" && parts[1] === "me" && method === "GET") {
     const s = await sessionFrom(req, env)
     return s === null ? bad("not signed in", 401) : json({ session: s })
+  }
+
+  // --- profile (display name), per the authenticated account ---
+  if (parts[0] === "account" && parts.length === 1) {
+    const s = await sessionFrom(req, env)
+    if (s === null) return bad("sign in required", 401)
+    if (method === "GET") {
+      const row = await env.DB.prepare("SELECT name FROM accounts WHERE email = ?").bind(s.email).first<{ name: string }>()
+      return json({ name: row?.name ?? "" })
+    }
+    if (method === "POST") {
+      const { name } = (await req.json()) as { name?: string }
+      await env.DB.prepare("INSERT INTO accounts (email, name) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET name = excluded.name")
+        .bind(s.email, (name ?? "").trim())
+        .run()
+      return json({ name: (name ?? "").trim() })
+    }
   }
 
   // --- create page (auth) ---
@@ -251,11 +254,12 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
       if (!owns) return bad("not your page", 403)
       const res = await callDO(env, pageId, "/bookers")
       const { bookings } = (await res.json()) as { bookings: { slotIdx: number; email: string; bookingId: string }[] }
-      // join names from D1 (provider-only PII)
+      // join display names from D1 (provider-only PII); fall back to the email
       const enriched = await Promise.all(
         bookings.map(async (b) => {
           const acc = await env.DB.prepare("SELECT name FROM accounts WHERE email = ?").bind(b.email).first<{ name: string }>()
-          return { ...b, name: acc?.name ?? b.email }
+          const name = acc?.name !== undefined && acc.name !== "" ? acc.name : b.email
+          return { ...b, name }
         }),
       )
       return json({ bookers: enriched })

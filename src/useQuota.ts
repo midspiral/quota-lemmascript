@@ -1,7 +1,7 @@
 // Hooks the UI uses. usePage is null-safe (a RemoteStore loads async); the
 // registry hooks load async and work for both local and remote catalogs.
 import { useEffect, useState, useSyncExternalStore } from "react"
-import { catalog } from "./config"
+import { catalog, profile } from "./config"
 import type { PageStore } from "./store"
 import type { Auth, Session } from "./auth"
 import type { Booking, Page } from "./domain"
@@ -53,6 +53,32 @@ export function usePageRef(username: string, pagename: string): { loading: boole
     }
   }, [username, pagename])
   return state
+}
+
+// The signed-in account's optional display name (a profile setting).
+export function useProfile(): { name: string; loading: boolean; save: (n: string) => Promise<void> } {
+  const [name, setName] = useState("")
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    let active = true
+    void profile.name().then((n) => {
+      if (active) {
+        setName(n)
+        setLoading(false)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+  return {
+    name,
+    loading,
+    save: async (n: string) => {
+      await profile.setName(n)
+      setName(n.trim())
+    },
+  }
 }
 
 // Booker names (provider view). Re-fetches whenever the page snapshot changes.

@@ -43,8 +43,9 @@ on-screen). Single device, no server.
 npm run dev          # → http://localhost:5173
 ```
 
-Sign in (any name + email → click the on-screen dev link) → **New page** → add slots → share
-the public link → book a slot. See `DESIGN_APP.md`.
+Sign in (**email only** → click the on-screen dev link) → optionally set a display name on the
+**Account** page → **New page** → add slots → share the public link → book a slot. The display
+name is an optional profile setting (providers see it, or your email if unset). See `DESIGN_APP.md`.
 
 ## Run it — on Cloudflare (real multi-device)
 

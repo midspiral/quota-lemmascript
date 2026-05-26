@@ -32,24 +32,36 @@ page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text())
 })
 
-async function signIn(name, email) {
-  await page.getByPlaceholder("Your name").fill(name)
+async function signIn(email) {
   await page.getByPlaceholder("you@example.com").fill(email)
   await page.getByRole("button", { name: "Send magic link" }).click()
   await page.getByRole("link", { name: /Open magic link/ }).click()
 }
 
 try {
-  step("load + sign in (magic-link round-trip)")
+  step("load + sign in (email-only magic-link round-trip)")
   await page.goto(BASE, { waitUntil: "domcontentloaded" })
   await page.getByRole("button", { name: "Send magic link" }).waitFor({ timeout: 10000 })
-  await signIn("Sam", `${local}@example.com`)
+  await signIn(`${local}@example.com`)
   await page.getByText("Your pages").waitFor({ timeout: 10000 })
   await page.screenshot({ path: shot("console") })
   ok("signed in; console rendered (no loop)")
 
+  step("set display name on the Account page (a profile setting, not at sign-in)")
+  await page.evaluate(() => {
+    location.hash = "#/account"
+  })
+  const nameField = page.getByPlaceholder("Your name")
+  await nameField.waitFor({ timeout: 10000 })
+  await nameField.fill("Sam")
+  await page.getByRole("button", { name: "Save" }).click()
+  await page.getByText("Saved.").waitFor({ timeout: 10000 })
+  ok("display name saved")
+
   step("create a page (capacity-1 slot)")
-  await page.getByRole("button", { name: /New page/ }).click()
+  await page.evaluate(() => {
+    location.hash = "#/new"
+  })
   await page.getByPlaceholder("Yoga with Sam").fill("Yoga with Sam")
   await page.getByPlaceholder("yoga", { exact: true }).fill(slug)
   await page.getByPlaceholder(/Slot 1/).fill("Mon 9:00 AM")
@@ -67,19 +79,22 @@ try {
   await page.screenshot({ path: shot("booked") })
   ok("booked; 'You're in' shown")
 
-  step("provider sees the booker by name")
+  step("provider sees the booker by display name")
   await page.evaluate((h) => {
     location.hash = h
   }, `#/${handle}/${slug}/manage`)
   await page.getByRole("button", { name: "View public page" }).waitFor({ timeout: 10000 })
-  await page.getByText("Sam", { exact: true }).first().waitFor({ timeout: 10000 })
+  // Target the booker badge specifically (title = the booker's email), not the header.
+  const badge = page.locator(`[title="${local}@example.com"]`)
+  await badge.waitFor({ timeout: 10000 })
   await page.screenshot({ path: shot("manage-booked") })
-  ok("editor shows the booker name")
+  if ((await badge.innerText()).trim() === "Sam") ok("booker badge shows the display name (Sam)")
+  else fail(`booker badge: "${(await badge.innerText()).trim()}"`)
 
   step("handle uniqueness: 2nd account, same email local-part → disambiguated")
   await page.getByRole("button", { name: "Sign out" }).click()
   await page.getByRole("button", { name: "Send magic link" }).waitFor({ timeout: 10000 })
-  await signIn("Sam Two", `${local}@other.test`)
+  await signIn(`${local}@other.test`)
   await page.getByText("Your pages").waitFor({ timeout: 10000 })
   const handleText = await page.getByText(new RegExp(`quota\\.app/${handle}`)).innerText()
   if (handleText.includes(`${handle}-2`)) ok(`2nd account got a distinct handle (${handleText.trim()})`)

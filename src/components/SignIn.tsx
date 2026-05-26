@@ -3,14 +3,13 @@ import type { FormEvent } from "react"
 import type { Auth } from "../auth"
 import { Button, Card, Field, Input } from "./ui"
 
-// Account sign-in (providers and bookers alike). The server either emails a real
-// magic link (Stytch) or — keyless/local — returns a dev link to click. After
-// sign-in we return to `returnTo`.
+// Account sign-in (providers and bookers alike) — email only; the server emails a
+// real magic link (Stytch) or, keyless/local, returns a dev link to click.
 export function SignIn({
   auth,
   returnTo = "/",
   title = "Sign in to Quota",
-  subtitle = "One account to create pages and to book slots.",
+  subtitle = "No password — we'll email you a magic link.",
 }: {
   auth: Auth
   returnTo?: string
@@ -18,13 +17,12 @@ export function SignIn({
   subtitle?: string
 }) {
   const [email, setEmail] = useState("")
-  const [name, setName] = useState("")
   const [submitted, setSubmitted] = useState(false)
   const [devLink, setDevLink] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const ready = email.includes("@") && name.trim() !== ""
+  const ready = email.includes("@")
 
   async function submit(e: FormEvent): Promise<void> {
     e.preventDefault()
@@ -32,7 +30,7 @@ export function SignIn({
     setBusy(true)
     setError(null)
     try {
-      const res = await auth.requestLink(email.trim(), name.trim(), returnTo)
+      const res = await auth.requestLink(email.trim(), returnTo)
       setDevLink(res.devLink ?? null)
       setSubmitted(true)
     } catch {
@@ -49,15 +47,13 @@ export function SignIn({
       <Card className="mt-8 p-6">
         {!submitted ? (
           <form onSubmit={(e) => void submit(e)} className="space-y-4">
-            <Field label="Name">
-              <Input placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-            </Field>
-            <Field label="Email" hint="No password — we'll send you a magic link.">
+            <Field label="Email">
               <Input
                 type="email"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoFocus
               />
             </Field>
             {error !== null && <p className="text-sm text-rose-600">{error}</p>}
@@ -90,7 +86,7 @@ export function SignIn({
                 setDevLink(null)
               }}
             >
-              use different details
+              use a different email
             </button>
           </div>
         )}

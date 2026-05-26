@@ -10,6 +10,8 @@ import { createRemoteAuth } from "./remoteAuth"
 import type { Catalog } from "./catalog"
 import { localCatalog } from "./catalog"
 import { remoteCatalog } from "./remoteCatalog"
+import type { Profile } from "./profile"
+import { localProfile, remoteProfile } from "./profile"
 
 export const REMOTE = import.meta.env.VITE_REMOTE === "1"
 
@@ -20,3 +22,5 @@ export function loadStore(pageId: string): PageStore {
 export const auth: Auth = REMOTE ? createRemoteAuth() : createLocalAuth()
 
 export const catalog: Catalog = REMOTE ? remoteCatalog : localCatalog
+
+export const profile: Profile = REMOTE ? remoteProfile : localProfile

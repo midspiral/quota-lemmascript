@@ -1,14 +1,11 @@
-// A local "who's who" directory: email → name, so the provider can show booker
-// names. Bookers are now signed-in accounts, so their identity is their session;
-// the verified core still only stores the (now-email) key, and names live here in
-// the shell. Cloudflare keeps this server-side, readable only by the provider.
+// Local handle registry: claims a globally-unique public username per account,
+// derived from the email and disambiguated on collision (sam, sam-2, …). The
+// local stand-in for the Cloudflare D1 `UNIQUE(handle)` constraint.
 import { load, save } from "./persist"
 
-const PEOPLE = "quota:people"
-const HANDLES = "quota:handles" // handle -> owner email (the username registry)
+const HANDLES = "quota:handles" // handle -> owner email
 const HANDLE_OF = "quota:handle-of" // email -> the handle it claimed
 
-type People = Record<string, string> // email -> name
 type Map = Record<string, string>
 
 function baseHandle(email: string): string {
@@ -16,9 +13,6 @@ function baseHandle(email: string): string {
   return local.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "user"
 }
 
-// Claim a globally-unique public handle for this account, deriving it from the
-// email but disambiguating collisions (sam, sam-2, …). Stable per email. This is
-// the local stand-in for the Cloudflare D1 registry's UNIQUE(username) constraint.
 export function claimHandle(email: string): string {
   const ofEmail = load<Map>(HANDLE_OF, {})
   const already = ofEmail[email]
@@ -37,17 +31,4 @@ export function claimHandle(email: string): string {
   save(HANDLES, owners)
   save(HANDLE_OF, ofEmail)
   return handle
-}
-
-export function rememberPerson(email: string, name: string): void {
-  const people = load<People>(PEOPLE, {})
-  if (people[email] !== name) {
-    people[email] = name
-    save(PEOPLE, people)
-  }
-}
-
-export function nameFor(email: string): string {
-  const people = load<People>(PEOPLE, {})
-  return people[email] ?? email
 }

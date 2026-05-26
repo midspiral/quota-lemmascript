@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 export type Route =
   | { name: "home" }
   | { name: "new" }
+  | { name: "account" }
   | { name: "auth"; token: string; returnTo: string }
   | { name: "booking"; username: string; pagename: string }
   | { name: "manage"; username: string; pagename: string }
@@ -16,6 +17,7 @@ export function parseHash(hash: string): Route {
   const parts = path.split("/").filter(Boolean)
   if (parts.length === 0) return { name: "home" }
   if (parts[0] === "new") return { name: "new" }
+  if (parts[0] === "account") return { name: "account" }
   if (parts[0] === "auth") {
     const params = new URLSearchParams(query ?? "")
     return { name: "auth", token: params.get("token") ?? "", returnTo: params.get("returnTo") ?? "/" }

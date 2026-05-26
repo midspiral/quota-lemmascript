@@ -20,11 +20,8 @@ export function createRemoteAuth(): Auth {
         subs.delete(fn)
       }
     },
-    async requestLink(email, name, returnTo) {
-      // Stash returnTo locally: the Stytch redirect URL must be bare (no query),
-      // so we recover it here when the link is clicked (same browser).
-      localStorage.setItem("quota:returnTo", returnTo)
-      const r = await apiPost<{ devLink?: string }>("/api/auth/request", { email, name, returnTo })
+    async requestLink(email, returnTo) {
+      const r = await apiPost<{ devLink?: string }>("/api/auth/request", { email, returnTo })
       if (r.status !== 200 || r.data === null) throw new Error("could not start sign-in")
       // devLink present in keyless/dev mode; absent when a real email was sent (Stytch)
       return { devLink: r.data.devLink }

@@ -3,7 +3,7 @@
 import type { Page, Slot } from "./domain"
 import { initPage } from "./domain"
 import { load, save, pageKey, uid } from "./persist"
-import { nameFor } from "./identity"
+import { localNameFor } from "./profile"
 
 export interface PageRef {
   username: string
@@ -14,8 +14,8 @@ export interface PageRef {
 
 export interface BookerInfo {
   slotIdx: number
-  name: string
   email: string
+  name: string // display name if set, else the email
   bookingId: string
 }
 
@@ -57,6 +57,6 @@ export const localCatalog: Catalog = {
     if (page === null) return []
     return page.bookings
       .filter((b) => b.status === "confirmed")
-      .map((b) => ({ slotIdx: b.slotIdx, email: b.key, name: nameFor(b.key), bookingId: b.id }))
+      .map((b) => ({ slotIdx: b.slotIdx, email: b.key, name: localNameFor(b.key) || b.key, bookingId: b.id }))
   },
 }

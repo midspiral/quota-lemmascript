@@ -85,9 +85,10 @@ Cloudflare swaps only the trust.
 src/
   domain.ts          ← verified core (unchanged; imported by store + hook)
   store.ts           ← PageStore interface + LocalStore (only importer of mutations)
-  auth.ts            ← Auth interface + LocalAuth (faked magic link; session in localStorage)
+  auth.ts            ← Auth interface + LocalAuth (email-only faked magic link; session in localStorage)
+  profile.ts         ← Profile seam: optional display name per account (local map / remote /api/account)
   catalog.ts         ← local page registry: username/pagename ⟷ pageId, "my pages" (localStorage)
-  identity.ts        ← accounts: people directory (email → name) + unique-handle registry (localStorage)
+  identity.ts        ← unique-handle registry (username claimed from the email, disambiguated)
   useQuota.ts        ← hooks wrapping the verified QUERIES (no domain math in components)
   config.ts          ← LocalStore vs RemoteStore (VITE_REMOTE flag)
   router.tsx         ← tiny hash router (#/, #/new, #/:user/:page, #/:user/:page/manage)
@@ -96,7 +97,8 @@ src/
   components/
     BookingPage.tsx  ← PUBLIC airy single-column list (the centerpiece)
     SlotRow.tsx      ← one slot: label, capacity bar, “N left”, Book / booked / cancel
-    SignIn.tsx       ← provider sign-in (email → faked dev magic link → session)
+    SignIn.tsx       ← sign-in, EMAIL ONLY (email → faked dev magic link → session)
+    Account.tsx      ← account settings: set an optional display name (a profile setting)
     Console.tsx      ← provider home (auth-gated): your handle, your pages, “New page”
     NewPage.tsx      ← create a page (title, username/pagename slug, initial slots)
     PageEditor.tsx   ← manage one page: add/close slots, set capacity, bookers, share link
@@ -171,11 +173,13 @@ the number on the cell is, by construction, the verified count.
 - **State**: each page is a verified `Page` in `localStorage` under `quota:page:<id>`; the
   catalog (`username/pagename → id`, your page list) under `quota:catalog`; the signed-in
   session under `quota:session`; the people directory (email → name) under `quota:people`.
-- **Identity**: one **account** model — sign in (faked magic link) with name + email; "provider"
-  just means you've created a page. Booking uses your session email as the verified dedup `key`
-  (so the same account can't double-book a slot, and "your bookings" falls out of `key ===
-  email`). Names are PII kept in the shell directory, shown to the provider. Locally it's a
-  single-device sandbox, so you can be both roles.
+- **Identity**: one **account** model — sign in with **email only** (a magic link; the email is
+  the identity); "provider" just means you've created a page. Booking uses your session email as
+  the verified dedup `key` (so the same account can't double-book a slot, and "your bookings"
+  falls out of `key === email`). A **display name is an optional profile setting** (the Account
+  page), decoupled from the awkward magic-link round-trip — set once, persisted, shown to
+  providers (who otherwise see the email). Locally it's a single-device sandbox, so you can be
+  both roles.
 - **Handles are unique.** A vanity `username` is **claimed per account** at sign-in — derived
   from the email but disambiguated on collision (`sam`, `sam-2`, …) and persisted, so handle ↔
   account is 1:1. That makes ownership-by-handle sound (you can only manage `your-handle/*`).
