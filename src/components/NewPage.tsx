@@ -2,7 +2,8 @@ import { useState } from "react"
 import type { FormEvent } from "react"
 import type { Session } from "../auth"
 import type { Slot } from "../domain"
-import { createPage, pagenameTaken, slugify } from "../catalog"
+import { slugify } from "../catalog"
+import { catalog } from "../config"
 import { navigate, manageHref } from "../router"
 import { Button, Card, Field, Input } from "./ui"
 
@@ -37,18 +38,21 @@ export function NewPage({ session }: { session: Session }) {
     setSlots((s) => s.filter((_, j) => j !== i))
   }
 
-  function submit(e: FormEvent): void {
+  async function submit(e: FormEvent): Promise<void> {
     e.preventDefault()
     const name = slugify(effectiveSlug)
     if (title.trim() === "") return setError("Give your page a title.")
     if (name === "") return setError("Choose a URL slug.")
-    if (pagenameTaken(session.handle, name)) return setError("You already have a page with that slug.")
     const built: Slot[] = slots
       .filter((s) => s.label.trim() !== "")
       .map((s) => ({ label: s.label.trim(), capacity: Math.max(0, parseInt(s.capacity, 10) || 0) }))
     if (built.length === 0) return setError("Add at least one slot with a label.")
-    createPage(session.handle, name, title.trim(), built)
-    navigate(manageHref(session.handle, name))
+    try {
+      const ref = await catalog.createPage(session.handle, name, title.trim(), built)
+      navigate(manageHref(ref.username, ref.pagename))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create page.")
+    }
   }
 
   return (
@@ -56,7 +60,7 @@ export function NewPage({ session }: { session: Session }) {
       <h1 className="text-2xl font-semibold tracking-tight text-stone-900">New page</h1>
 
       <Card className="mt-8 space-y-5 p-6">
-        <form onSubmit={submit} className="space-y-5">
+        <form onSubmit={(e) => void submit(e)} className="space-y-5">
           <Field label="Title">
             <Input value={title} onChange={(e) => onTitle(e.target.value)} placeholder="Yoga with Sam" autoFocus />
           </Field>

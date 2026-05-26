@@ -1,11 +1,11 @@
 import type { Session } from "../auth"
-import { listPages } from "../catalog"
+import { useMyPages } from "../useQuota"
 import { Button, Card } from "./ui"
 import { navigate, manageHref, bookingHref } from "../router"
 
 // Provider home (auth-gated): your pages + a way to create one.
 export function Console({ session }: { session: Session }) {
-  const pages = listPages(session.handle)
+  const { loading, pages } = useMyPages(session.handle)
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-12">
@@ -19,7 +19,9 @@ export function Console({ session }: { session: Session }) {
         <Button onClick={() => navigate("/new")}>New page</Button>
       </div>
 
-      {pages.length === 0 ? (
+      {loading ? (
+        <p className="mt-10 text-center text-sm text-stone-400">Loading…</p>
+      ) : pages.length === 0 ? (
         <Card className="mt-8 p-10 text-center">
           <p className="text-stone-500">No pages yet.</p>
           <div className="mt-4">

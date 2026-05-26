@@ -1,13 +1,11 @@
 import { useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import type { Session } from "../auth"
-import { resolve } from "../catalog"
 import { loadStore } from "../config"
-import { usePage } from "../useQuota"
+import { usePage, usePageRef, useBookers } from "../useQuota"
 import { NotFound } from "./NotFound"
 import { Bar, Button, Card, Input } from "./ui"
 import { bookingHref, navigate } from "../router"
-import { nameFor } from "../identity"
 
 export function PageEditor({
   username,
@@ -18,7 +16,8 @@ export function PageEditor({
   pagename: string
   session: Session
 }) {
-  const ref = useMemo(() => resolve(username, pagename), [username, pagename])
+  const { loading, ref } = usePageRef(username, pagename)
+  if (loading) return <p className="mx-auto max-w-2xl px-5 py-24 text-center text-sm text-stone-400">Loading…</p>
   if (ref === null) return <NotFound message={`No page at ${username}/${pagename}.`} />
   if (session.handle !== username) return <NotFound message="This isn't your page to manage." />
   return <EditorInner pageId={ref.pageId} username={username} pagename={pagename} />
@@ -27,6 +26,7 @@ export function PageEditor({
 function EditorInner({ pageId, username, pagename }: { pageId: string; username: string; pagename: string }) {
   const store = useMemo(() => loadStore(pageId), [pageId])
   const q = usePage(store)
+  const bookers = useBookers(pageId, q.page)
   const [label, setLabel] = useState("")
   const [cap, setCap] = useState("1")
   const [copied, setCopied] = useState(false)
@@ -51,11 +51,16 @@ function EditorInner({ pageId, username, pagename }: { pageId: string; username:
     }
   }
 
+  if (q.page === null) {
+    return <p className="mx-auto max-w-2xl px-5 py-24 text-center text-sm text-stone-400">Loading…</p>
+  }
+  const page = q.page
+
   return (
     <div className="mx-auto max-w-2xl px-5 py-12">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-stone-900">{q.page.title}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-stone-900">{page.title}</h1>
           <button
             onClick={() => void copyLink()}
             className="mt-1 font-mono text-xs text-stone-400 hover:text-stone-600"
@@ -69,13 +74,12 @@ function EditorInner({ pageId, username, pagename }: { pageId: string; username:
         </Button>
       </div>
 
-      {/* Slots */}
       <div className="mt-8 space-y-3">
-        {q.page.slots.map((slot, i) => {
+        {page.slots.map((slot, i) => {
           const confirmed = q.confirmedOf(i)
           const capacity = q.capacityOf(i)
-          const bookers = q.bookersOf(i)
           const atFloor = capacity <= confirmed
+          const slotBookers = bookers.filter((b) => b.slotIdx === i)
           return (
             <Card key={i} className="p-5">
               <div className="flex items-baseline justify-between gap-4">
@@ -116,15 +120,15 @@ function EditorInner({ pageId, username, pagename }: { pageId: string; username:
                 </Button>
               </div>
 
-              {bookers.length > 0 && (
+              {slotBookers.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5 border-t border-stone-100 pt-3">
-                  {bookers.map((b) => (
+                  {slotBookers.map((b) => (
                     <span
-                      key={b.id}
+                      key={b.bookingId}
                       className="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600"
-                      title={b.key}
+                      title={b.email}
                     >
-                      {nameFor(b.key)}
+                      {b.name}
                     </span>
                   ))}
                 </div>
@@ -132,12 +136,11 @@ function EditorInner({ pageId, username, pagename }: { pageId: string; username:
             </Card>
           )
         })}
-        {q.page.slots.length === 0 && (
+        {page.slots.length === 0 && (
           <p className="py-6 text-center text-sm text-stone-400">No slots yet — add one below.</p>
         )}
       </div>
 
-      {/* Add slot */}
       <Card className="mt-6 p-5">
         <form onSubmit={addSlot} className="flex items-end gap-2">
           <div className="flex-1">

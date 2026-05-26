@@ -14,7 +14,7 @@ import {
 import { load, save, pageKey, uid } from "./persist"
 
 export interface PageStore {
-  getSnapshot(): Page
+  getSnapshot(): Page | null // null while a RemoteStore loads its first state
   subscribe(fn: () => void): () => void
   // booking side (anonymous, contended, fallible — returns the authoritative outcome)
   book(slotIdx: number, key: string): Promise<{ outcome: BookOutcome; bookingId: string }>

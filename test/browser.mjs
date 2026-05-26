@@ -1,12 +1,19 @@
-// Browser smoke: drive the real app in Chrome and assert no console/page errors
-// through the full flow (sign in → magic link → create page → book).
-// Needs playwright-core + system Chrome (channel: "chrome"); run with dev up:
-//   npm run dev &
-//   BASE=http://localhost:5174/ node test/browser.mjs
+// Browser smoke: drive the real app in Chrome through the full flow (sign in →
+// magic link → create page → book → provider sees booker → handle uniqueness),
+// asserting no console/page errors. Works against BOTH backends:
+//   local:   npm run dev            && BASE=http://localhost:5174/ node test/browser.mjs
+//   remote:  npm run worker:dev     && BASE=http://localhost:8787/ node test/browser.mjs
+// Needs playwright-core + system Chrome (channel "chrome").
 import { chromium } from "playwright-core"
 
 const BASE = process.env.BASE ?? "http://localhost:5174/"
 const shot = (name) => `/tmp/quota-${name}.png`
+
+// Unique per run so it's re-runnable against persistent (D1) state.
+const runId = Date.now().toString().slice(-7)
+const local = `sam${runId}` // shared email local-part → handle "sam<runId>"
+const handle = local // baseHandle(local) === local (alphanumeric)
+const slug = `yoga${runId}`
 
 const pageErrors = []
 const consoleErrors = []
@@ -25,63 +32,58 @@ page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text())
 })
 
-try {
-  step("load app")
-  await page.goto(BASE, { waitUntil: "domcontentloaded" })
-  await page.getByRole("button", { name: "Send magic link" }).waitFor({ timeout: 8000 })
-  ok("sign-in screen renders")
-
-  step("request + open magic link")
-  await page.getByPlaceholder("Your name").fill("Sam")
-  await page.getByPlaceholder("you@example.com").fill("sam@example.com")
-  await page.getByRole("button", { name: "Send magic link" }).click()
-  const link = page.getByRole("link", { name: /Open magic link/ })
-  await link.waitFor({ timeout: 8000 })
-  await link.click()
-
-  step("land on console (this is where the infinite loop used to hit)")
-  await page.getByText("Your pages").waitFor({ timeout: 8000 })
-  await page.screenshot({ path: shot("console") })
-  ok("console rendered after sign-in (no loop)")
-
-  step("create a page")
-  await page.getByRole("button", { name: /New page/ }).click()
-  await page.getByPlaceholder("Yoga with Sam").fill("Yoga with Sam")
-  await page.getByPlaceholder(/Slot 1/).fill("Mon 9:00 AM")
-  await page.getByLabel("capacity").first().fill("2")
-  await page.getByRole("button", { name: "Create page" }).click()
-  await page.getByRole("button", { name: "View public page" }).waitFor({ timeout: 8000 })
-  await page.screenshot({ path: shot("editor") })
-  ok("page created, editor renders")
-
-  step("open public page and book a slot")
-  await page.getByRole("button", { name: "View public page" }).click()
-  const bookBtn = page.getByRole("button", { name: "Book" }).first()
-  await bookBtn.waitFor({ timeout: 8000 })
-  await bookBtn.click()
-  await page.getByText("You're in").waitFor({ timeout: 8000 })
-  await page.screenshot({ path: shot("booked") })
-  ok("booked a slot; 'You're in' shown")
-
-  step("provider sees the booker by name")
-  await page.evaluate(() => {
-    location.hash = "#/sam/yoga-with-sam/manage"
-  })
-  await page.getByRole("button", { name: "View public page" }).waitFor({ timeout: 8000 })
-  await page.screenshot({ path: shot("manage-booked") })
-  ok("editor reachable after booking")
-
-  step("handle uniqueness: a 2nd account with the same email local-part is disambiguated")
-  await page.getByRole("button", { name: "Sign out" }).click()
-  await page.getByRole("button", { name: "Send magic link" }).waitFor({ timeout: 8000 })
-  await page.getByPlaceholder("Your name").fill("Sam Two")
-  await page.getByPlaceholder("you@example.com").fill("sam@other.test") // local-part "sam" again
+async function signIn(name, email) {
+  await page.getByPlaceholder("Your name").fill(name)
+  await page.getByPlaceholder("you@example.com").fill(email)
   await page.getByRole("button", { name: "Send magic link" }).click()
   await page.getByRole("link", { name: /Open magic link/ }).click()
-  await page.getByText("Your pages").waitFor({ timeout: 8000 })
-  const handleText = await page.getByText(/quota\.app\/sam/).innerText()
-  if (/sam-2/.test(handleText)) ok(`2nd account got a distinct handle (${handleText.trim()})`)
-  else fail(`2nd account handle not disambiguated: "${handleText.trim()}"`)
+}
+
+try {
+  step("load + sign in (magic-link round-trip)")
+  await page.goto(BASE, { waitUntil: "domcontentloaded" })
+  await page.getByRole("button", { name: "Send magic link" }).waitFor({ timeout: 10000 })
+  await signIn("Sam", `${local}@example.com`)
+  await page.getByText("Your pages").waitFor({ timeout: 10000 })
+  await page.screenshot({ path: shot("console") })
+  ok("signed in; console rendered (no loop)")
+
+  step("create a page (capacity-1 slot)")
+  await page.getByRole("button", { name: /New page/ }).click()
+  await page.getByPlaceholder("Yoga with Sam").fill("Yoga with Sam")
+  await page.getByPlaceholder("yoga", { exact: true }).fill(slug)
+  await page.getByPlaceholder(/Slot 1/).fill("Mon 9:00 AM")
+  await page.getByLabel("capacity").first().fill("1")
+  await page.getByRole("button", { name: "Create page" }).click()
+  await page.getByRole("button", { name: "View public page" }).waitFor({ timeout: 10000 })
+  ok(`page created at ${handle}/${slug}`)
+
+  step("open public page and book the seat")
+  await page.getByRole("button", { name: "View public page" }).click()
+  const bookBtn = page.getByRole("button", { name: "Book" }).first()
+  await bookBtn.waitFor({ timeout: 10000 })
+  await bookBtn.click()
+  await page.getByText("You're in").waitFor({ timeout: 10000 })
+  await page.screenshot({ path: shot("booked") })
+  ok("booked; 'You're in' shown")
+
+  step("provider sees the booker by name")
+  await page.evaluate((h) => {
+    location.hash = h
+  }, `#/${handle}/${slug}/manage`)
+  await page.getByRole("button", { name: "View public page" }).waitFor({ timeout: 10000 })
+  await page.getByText("Sam", { exact: true }).first().waitFor({ timeout: 10000 })
+  await page.screenshot({ path: shot("manage-booked") })
+  ok("editor shows the booker name")
+
+  step("handle uniqueness: 2nd account, same email local-part → disambiguated")
+  await page.getByRole("button", { name: "Sign out" }).click()
+  await page.getByRole("button", { name: "Send magic link" }).waitFor({ timeout: 10000 })
+  await signIn("Sam Two", `${local}@other.test`)
+  await page.getByText("Your pages").waitFor({ timeout: 10000 })
+  const handleText = await page.getByText(new RegExp(`quota\\.app/${handle}`)).innerText()
+  if (handleText.includes(`${handle}-2`)) ok(`2nd account got a distinct handle (${handleText.trim()})`)
+  else fail(`2nd handle not disambiguated: "${handleText.trim()}"`)
 } catch (e) {
   fail(`flow threw: ${e.message}`)
   await page.screenshot({ path: shot("error") }).catch(() => {})

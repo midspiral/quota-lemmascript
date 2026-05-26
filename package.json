@@ -12,7 +12,8 @@
     "test": "node test/smoke.ts",
     "test:browser": "node test/browser.mjs",
     "db:init": "wrangler d1 execute quota --local --file=worker/schema.sql",
-    "worker:dev": "wrangler dev",
+    "worker:dev": "VITE_REMOTE=1 vite build && wrangler dev",
+    "deploy": "VITE_REMOTE=1 vite build && wrangler deploy",
     "test:api": "node test/api.mjs"
   },
   "dependencies": {

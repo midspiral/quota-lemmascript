@@ -5,14 +5,16 @@ service — **without changing the UI** — by swapping the three local seams fo
 implementations. Companion to `DESIGN.md` (the verified core), `DESIGN.md §6` (the target
 architecture), and `DESIGN_APP.md` (the shell + seams). This file is the transport/infra layer.
 
-> **Status: backend built & verified; client wiring pending.** `worker/index.ts` (the Worker +
-> `QuotaPage` Durable Object), `worker/schema.sql` (D1), and `wrangler.toml` are in. The full API
-> is exercised end-to-end against `wrangler dev` by `test/api.mjs` (`npm run test:api`) — auth +
-> magic-link round-trip, D1 registry + unique handles, the DO running the verified `domain.ts`
-> (booking **never oversells under contention**), owner-only booker names, and PII redaction.
-> **Still pending:** the client seams (`RemoteStore`/`RemoteAuth` + async registry loading in
-> the components) so the SPA talks to this backend with `VITE_REMOTE=1`. Run locally:
-> `npm run db:init` then `npm run worker:dev` (D1 + DO + WS via miniflare).
+> **Status: built & verified end-to-end (local dev).** Backend (`worker/index.ts`,
+> `worker/schema.sql`, `wrangler.toml`) **and** client seams (`src/remoteStore.ts`,
+> `src/remoteAuth.ts`, `src/remoteCatalog.ts`, gated in `src/config.ts`) are in. The *same*
+> `test/browser.mjs` flow passes against both the local-first app (`npm run dev`) **and** this
+> Cloudflare backend (`npm run worker:dev`, served by `wrangler dev`): sign-in, page creation,
+> booking (never oversells under contention), the provider seeing booker names, and handle
+> uniqueness. `test/api.mjs` (`npm run test:api`) additionally curl-checks the API + redaction.
+> Run locally: `npm run db:init` (once) then `npm run worker:dev`. **Not yet done for real
+> production:** sending actual magic-link email (locally the link is returned in the response),
+> remote D1 provisioning, and the hardening in §8/§9. See `README.md` for deploy steps.
 
 ---
 

@@ -1,19 +1,22 @@
 import { useMemo, useState } from "react"
-import { resolve } from "../catalog"
 import { loadStore, auth } from "../config"
-import { usePage, useSession } from "../useQuota"
+import { usePage, useSession, usePageRef } from "../useQuota"
 import { SlotRow } from "./SlotRow"
 import { SignIn } from "./SignIn"
 import { NotFound } from "./NotFound"
 import { Card } from "./ui"
 
 // Public booking page. Availability is viewable by anyone; booking requires an
-// account (one-click once signed in — identity comes from the session, so no
-// per-booking form). Signing in returns here (returnTo).
+// account (one-click once signed in). Signing in returns here (returnTo).
 export function BookingPage({ username, pagename }: { username: string; pagename: string }) {
-  const ref = useMemo(() => resolve(username, pagename), [username, pagename])
+  const { loading, ref } = usePageRef(username, pagename)
+  if (loading) return <Loading />
   if (ref === null) return <NotFound message={`No page at ${username}/${pagename}.`} />
   return <BookingInner pageId={ref.pageId} username={username} pagename={pagename} />
+}
+
+function Loading() {
+  return <p className="mx-auto max-w-xl px-5 py-24 text-center text-sm text-stone-400">Loading…</p>
 }
 
 function BookingInner({ pageId, username, pagename }: { pageId: string; username: string; pagename: string }) {
@@ -23,11 +26,14 @@ function BookingInner({ pageId, username, pagename }: { pageId: string; username
   const [busy, setBusy] = useState<number | null>(null)
   const [notes, setNotes] = useState<Record<number, string>>({})
 
+  if (q.page === null) return <Loading />
+  const page = q.page
+
   const myEmail = session?.email ?? null
   const myBookingAt = (i: number) =>
     myEmail === null
       ? undefined
-      : q.page.bookings.find((b) => b.key === myEmail && b.slotIdx === i && b.status === "confirmed")
+      : page.bookings.find((b) => b.key === myEmail && b.slotIdx === i && b.status === "confirmed")
 
   async function book(i: number): Promise<void> {
     if (session === null) return
@@ -48,16 +54,16 @@ function BookingInner({ pageId, username, pagename }: { pageId: string; username
   return (
     <div className="mx-auto max-w-xl px-5 py-12">
       <header className="text-center">
-        <h1 className="text-2xl font-semibold tracking-tight text-stone-900">{q.page.title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-stone-900">{page.title}</h1>
         {q.isSoldOut && <p className="mt-2 text-sm text-stone-500">Every slot is full right now.</p>}
       </header>
 
-      {q.page.slots.length === 0 ? (
+      {page.slots.length === 0 ? (
         <p className="mt-10 text-center text-sm text-stone-400">No slots have been added yet.</p>
       ) : (
         <Card className="mt-8 px-6">
           <div className="divide-y divide-stone-200">
-            {q.page.slots.map((slot, i) => {
+            {page.slots.map((slot, i) => {
               const mineB = myBookingAt(i)
               return (
                 <SlotRow
@@ -81,7 +87,7 @@ function BookingInner({ pageId, username, pagename }: { pageId: string; username
         </Card>
       )}
 
-      {session === null && q.page.slots.length > 0 && (
+      {session === null && page.slots.length > 0 && (
         <SignIn
           auth={auth}
           returnTo={`/${username}/${pagename}`}
