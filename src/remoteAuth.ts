@@ -20,9 +20,10 @@ export function createRemoteAuth(): Auth {
         subs.delete(fn)
       }
     },
-    async requestLink(email, name) {
-      const r = await apiPost<{ devLink: string }>("/api/auth/request", { email, name })
+    async requestLink(email, name, returnTo) {
+      const r = await apiPost<{ devLink?: string }>("/api/auth/request", { email, name, returnTo })
       if (r.status !== 200 || r.data === null) throw new Error("could not start sign-in")
+      // devLink present in keyless/dev mode; absent when a real email was sent (Stytch)
       return { devLink: r.data.devLink }
     },
     async signInWithToken(token) {

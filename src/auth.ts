@@ -15,7 +15,8 @@ export interface Session {
 export interface Auth {
   current(): Session | null
   subscribe(fn: () => void): () => void
-  requestLink(email: string, name: string): Promise<{ devLink: string }>
+  // devLink present ⇒ show it to click (local/keyless); absent ⇒ a real email was sent
+  requestLink(email: string, name: string, returnTo: string): Promise<{ devLink?: string }>
   signInWithToken(token: string): Promise<Session>
   signOut(): void
 }
@@ -44,11 +45,11 @@ export function createLocalAuth(): Auth {
         subs.delete(fn)
       }
     },
-    async requestLink(email, name) {
+    async requestLink(email, name, returnTo) {
       const token = uid()
       save<Pending>(PENDING, { email, name, token })
       // In production this link is emailed; locally we surface it so you can click it.
-      return { devLink: `#/auth?token=${token}` }
+      return { devLink: `#/auth?token=${token}&returnTo=${encodeURIComponent(returnTo)}` }
     },
     async signInWithToken(token) {
       const pending = load<Pending | null>(PENDING, null)

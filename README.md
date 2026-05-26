@@ -90,10 +90,20 @@ running server (and Chrome for the latter).
    ```sh
    wrangler secret put AUTH_SECRET
    ```
-3. **Wire real email** for magic links (the only piece not built): in
-   `worker/index.ts`'s `/api/auth/request`, send the link via a transactional provider
-   (Resend / Postmark / SES) from a domain with **SPF + DKIM + DMARC**. Until then, sign-in
-   returns the link in the response (dev behavior). See `DESIGN_CLOUDFLARE.md §4`.
+3. **Enable real magic links via Stytch** (a hosted auth provider — it handles email delivery,
+   one-time-use, expiry, and rate limiting). Create a Stytch project, allow your redirect URL
+   (`https://<your-app>/#/auth`) in its dashboard, and set the Worker secrets:
+   ```sh
+   wrangler secret put STYTCH_PROJECT_ID
+   wrangler secret put STYTCH_SECRET
+   # optional: STYTCH_API_URL=https://api.stytch.com/v1 for the live env (default is test)
+   ```
+   With these **unset**, the Worker uses its built-in **keyless HMAC** link and returns it in
+   the response (dev behavior) — so `npm run dev` / `worker:dev` need no account. The client is
+   unchanged either way (auth lives behind the `Auth` seam). See `DESIGN_CLOUDFLARE.md §4`.
+   *(The live Stytch path needs your keys to validate; the helpers are unit-tested via
+   `npm run test:stytch`, and the redirect-URL ↔ hash-routing detail is worth confirming against
+   your project.)*
 4. **Deploy:**
    ```sh
    npm run deploy     # VITE_REMOTE=1 vite build && wrangler deploy

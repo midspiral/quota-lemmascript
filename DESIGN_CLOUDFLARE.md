@@ -12,9 +12,11 @@ architecture), and `DESIGN_APP.md` (the shell + seams). This file is the transpo
 > Cloudflare backend (`npm run worker:dev`, served by `wrangler dev`): sign-in, page creation,
 > booking (never oversells under contention), the provider seeing booker names, and handle
 > uniqueness. `test/api.mjs` (`npm run test:api`) additionally curl-checks the API + redaction.
-> Run locally: `npm run db:init` (once) then `npm run worker:dev`. **Not yet done for real
-> production:** sending actual magic-link email (locally the link is returned in the response),
-> remote D1 provisioning, and the hardening in §8/§9. See `README.md` for deploy steps.
+> Run locally: `npm run db:init` (once) then `npm run worker:dev`. **Auth: Stytch is scaffolded**
+> (`worker/stytch.ts`, gated on `STYTCH_*` keys; keyless HMAC fallback for dev) — helpers
+> unit-tested (`npm run test:stytch`), but the **live Stytch calls need your keys to validate**.
+> **Not yet done for real production:** the live Stytch validation, remote D1 provisioning, and
+> the hardening in §8/§9. See `README.md` for deploy steps.
 
 ---
 
@@ -89,10 +91,20 @@ Browser (SPA, unchanged UI)
 One account per email; "provider" = owns ≥ 1 page. Everyone authenticates (bookers included,
 per the app's current model).
 
-- **Magic link**: `requestLink(email, name)` → Worker stores a short-lived signed token (HMAC
-  with a Worker secret) and **emails** the link (e.g. via MailChannels / Resend). Clicking it →
-  `verify` checks the signature/expiry → issues a session (JWT cookie). This is the real version
-  of `LocalAuth`'s faked dev link.
+- **Magic link — Stytch when configured, keyless HMAC otherwise.** The `/api/auth/*` endpoints
+  branch *server-side* on whether `STYTCH_PROJECT_ID`/`STYTCH_SECRET` are set (`worker/stytch.ts`):
+  - **Stytch (prod):** `request` → upsert the name in D1 + `stytchSendMagicLink` (Stytch emails
+    the link, owning delivery + one-time-use + rate limiting); `verify` → `stytchAuthenticate`
+    the returned token → the verified email.
+  - **Keyless HMAC (dev):** `request` → mint a short-lived HMAC token and **return** the link in
+    the response (no email); `verify` → check signature/expiry. Lets `npm run dev`/`worker:dev`
+    run with no account.
+  - Either way `verify` then **claims the handle (D1) and mints our own session token** (HMAC
+    bearer). So Stytch owns only the login *event*; we keep the session + registry. **The client
+    is identical in both modes** — auth is entirely behind the `Auth` seam. (We chose a hosted
+    *auth* provider over a bare email provider: if we need an external dependency anyway, the
+    auth provider subsumes delivery *and* the security hygiene. A library wouldn't escape sending
+    email ourselves.)
 - **D1 tables**:
   - `accounts(email PK, name)` — the people directory (provider reads booker names).
   - `handles(handle PK, email)` — the **unique** username registry (`claimHandle` → a row).

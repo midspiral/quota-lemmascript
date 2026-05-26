@@ -10,12 +10,39 @@
 // Auth & registry are the trusted edge (outside the verified core).
 import type { Page, Slot, Booking } from "../src/domain"
 import { initPage, tryBook, cancel, addSlot, setCapacity, closeSlot, confirmedCount } from "../src/domain"
+import type { StytchConfig } from "./stytch"
+import { stytchEnabled, stytchSendMagicLink, stytchAuthenticate } from "./stytch"
 
 export interface Env {
   ASSETS: Fetcher
   QUOTA_PAGE: DurableObjectNamespace
   DB: D1Database
   AUTH_SECRET: string
+  // Optional Stytch credentials. When set, the magic link is sent by Stytch
+  // (real email); when unset, the Worker uses its own keyless HMAC link (dev).
+  STYTCH_PROJECT_ID?: string
+  STYTCH_SECRET?: string
+  STYTCH_API_URL?: string
+}
+
+const stytchCfg = (env: Env): StytchConfig => ({
+  projectId: env.STYTCH_PROJECT_ID,
+  secret: env.STYTCH_SECRET,
+  apiUrl: env.STYTCH_API_URL,
+})
+
+async function upsertAccount(env: Env, email: string, name: string): Promise<void> {
+  await env.DB.prepare("INSERT INTO accounts (email, name) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET name = excluded.name")
+    .bind(email, name)
+    .run()
+}
+
+// Mint our own session (handle claim + HMAC bearer), shared by both auth paths.
+async function issueSession(env: Env, email: string, name: string): Promise<Response> {
+  const handle = await claimHandle(env, email)
+  const session = { email, name, handle }
+  const token = await makeToken({ k: "s", ...session }, env.AUTH_SECRET, 60 * 60 * 24 * 30)
+  return json({ session, token })
 }
 
 interface Session {
@@ -112,25 +139,37 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
 
   // --- auth ---
   if (parts[0] === "auth" && parts[1] === "request" && method === "POST") {
-    const { email, name } = (await req.json()) as { email?: string; name?: string }
+    const { email, name, returnTo } = (await req.json()) as { email?: string; name?: string; returnTo?: string }
     if (!email || !email.includes("@") || !name) return bad("name and email required")
+    const rt = encodeURIComponent(typeof returnTo === "string" && returnTo !== "" ? returnTo : "/")
+    const cfg = stytchCfg(env)
+    if (stytchEnabled(cfg)) {
+      // Stytch sends the email; remember the name now (its callback won't carry it).
+      await upsertAccount(env, email, name)
+      const origin = new URL(req.url).origin
+      const ok = await stytchSendMagicLink(cfg, email, `${origin}/#/auth?returnTo=${rt}`)
+      return ok ? json({ sent: true }) : bad("could not send the sign-in email", 502)
+    }
+    // Keyless dev fallback: our own HMAC link, surfaced in the response.
     const token = await makeToken({ k: "ml", email, name }, env.AUTH_SECRET, 900)
-    // Production emails this; dev surfaces it (no email provider configured).
-    return json({ devLink: `#/auth?token=${token}` })
+    return json({ devLink: `#/auth?token=${token}&returnTo=${rt}` })
   }
   if (parts[0] === "auth" && parts[1] === "verify" && method === "POST") {
     const { token } = (await req.json()) as { token?: string }
-    const p = token ? await readToken(token, env.AUTH_SECRET) : null
+    if (!token) return bad("invalid or expired link", 401)
+    const cfg = stytchCfg(env)
+    if (stytchEnabled(cfg)) {
+      const r = await stytchAuthenticate(cfg, token)
+      if (r === null) return bad("invalid or expired link", 401)
+      const acc = await env.DB.prepare("SELECT name FROM accounts WHERE email = ?").bind(r.email).first<{ name: string }>()
+      return issueSession(env, r.email, acc?.name ?? r.email)
+    }
+    const p = await readToken(token, env.AUTH_SECRET)
     if (p === null || p.k !== "ml") return bad("invalid or expired link", 401)
     const email = String(p.email)
     const name = String(p.name)
-    await env.DB.prepare("INSERT INTO accounts (email, name) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET name = excluded.name")
-      .bind(email, name)
-      .run()
-    const handle = await claimHandle(env, email)
-    const session: Session = { email, name, handle }
-    const sessionToken = await makeToken({ k: "s", ...session }, env.AUTH_SECRET, 60 * 60 * 24 * 30)
-    return json({ session, token: sessionToken })
+    await upsertAccount(env, email, name)
+    return issueSession(env, email, name)
   }
   if (parts[0] === "auth" && parts[1] === "me" && method === "GET") {
     const s = await sessionFrom(req, env)

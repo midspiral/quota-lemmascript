@@ -25,24 +25,31 @@ async function jget(path, token) {
 }
 async function signIn(email, name) {
   const req = await jpost("/api/auth/request", { email, name })
-  const token = req.data.devLink.split("token=")[1]
+  const token = req.data.devLink.split("token=")[1].split("&")[0] // devLink now carries &returnTo
   const ver = await jpost("/api/auth/verify", { token })
   return ver.data
 }
 
+// Unique per run so it's re-runnable against persistent (D1) state.
+const r = Date.now().toString().slice(-7)
+const samEmail = `sam${r}@example.com`
+const samHandle = `sam${r}`
+const slug = `yoga${r}`
+const bobEmail = `bob${r}@example.com`
+
 // 1. sign in (magic link round-trip) + handle claim
-const sam = await signIn("sam@example.com", "Sam")
-if (sam.session?.handle === "sam") ok("sign-in works; handle claimed (sam)")
+const sam = await signIn(samEmail, "Sam")
+if (sam.session?.handle === samHandle) ok(`sign-in works; handle claimed (${samHandle})`)
 else fail(`sign-in/handle: ${JSON.stringify(sam)}`)
 
 // 2. create a page (capacity-1 slot) via D1 registry + DO init
-const created = await jpost("/api/pages", { pagename: "yoga", title: "Yoga", slots: [{ label: "Mon 9", capacity: 1 }] }, sam.token)
+const created = await jpost("/api/pages", { pagename: slug, title: "Yoga", slots: [{ label: "Mon 9", capacity: 1 }] }, sam.token)
 const pageId = created.data?.pageId
-if (pageId && created.data.username === "sam") ok("page created under sam/yoga")
+if (pageId && created.data.username === samHandle) ok(`page created under ${samHandle}/${slug}`)
 else fail(`create page: ${JSON.stringify(created)}`)
 
 // 3. resolve the vanity URL (public)
-const resolved = await jget("/api/u/sam/yoga")
+const resolved = await jget(`/api/u/${samHandle}/${slug}`)
 if (resolved.data?.pageId === pageId) ok("vanity URL resolves to the page")
 else fail(`resolve: ${JSON.stringify(resolved)}`)
 
@@ -57,7 +64,7 @@ if (b2.data?.outcome === "duplicate") ok("same-account re-book → duplicate")
 else fail(`book2: ${JSON.stringify(b2)}`)
 
 // 6. bob contends for the full seat → full (capacity safety in the DO)
-const bob = await signIn("bob@example.com", "Bob")
+const bob = await signIn(bobEmail, "Bob")
 const b3 = await jpost(`/api/pages/${pageId}/book`, { slotIdx: 0 }, bob.token)
 if (b3.data?.outcome === "full") ok("contending booker on a full slot → full (never oversold)")
 else fail(`book3: ${JSON.stringify(b3)}`)
@@ -65,7 +72,7 @@ else fail(`book3: ${JSON.stringify(b3)}`)
 // 7. owner sees the booker BY NAME (D1 join)
 const bookers = await jget(`/api/pages/${pageId}/bookers`, sam.token)
 const first = bookers.data?.bookers?.[0]
-if (first?.name === "Sam" && first?.email === "sam@example.com") ok("owner sees booker name (Sam)")
+if (first?.name === "Sam" && first?.email === samEmail) ok("owner sees booker name (Sam)")
 else fail(`bookers: ${JSON.stringify(bookers)}`)
 
 // 8. a non-owner is refused the booker list
