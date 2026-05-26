@@ -5,9 +5,14 @@ service — **without changing the UI** — by swapping the three local seams fo
 implementations. Companion to `DESIGN.md` (the verified core), `DESIGN.md §6` (the target
 architecture), and `DESIGN_APP.md` (the shell + seams). This file is the transport/infra layer.
 
-> **Status: design only — not built.** The local-first app (`DESIGN_APP.md`) is done and
-> browser-verified; this is the plan for the next increment, to be revisited/refined when we
-> build it. Nothing here ships until we wire `worker/` + `wrangler.toml`.
+> **Status: backend built & verified; client wiring pending.** `worker/index.ts` (the Worker +
+> `QuotaPage` Durable Object), `worker/schema.sql` (D1), and `wrangler.toml` are in. The full API
+> is exercised end-to-end against `wrangler dev` by `test/api.mjs` (`npm run test:api`) — auth +
+> magic-link round-trip, D1 registry + unique handles, the DO running the verified `domain.ts`
+> (booking **never oversells under contention**), owner-only booker names, and PII redaction.
+> **Still pending:** the client seams (`RemoteStore`/`RemoteAuth` + async registry loading in
+> the components) so the SPA talks to this backend with `VITE_REMOTE=1`. Run locally:
+> `npm run db:init` then `npm run worker:dev` (D1 + DO + WS via miniflare).
 
 ---
 

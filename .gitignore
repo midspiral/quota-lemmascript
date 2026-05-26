@@ -19,3 +19,7 @@ dist
 
 # NOTE: src/*.dfy and src/*.dfy.gen are intentionally tracked — CI regenerates
 # and diff-checks them (see LemmaScript-files.txt).
+
+# Cloudflare local dev secrets
+.dev.vars
+.dev.vars.*

@@ -7,16 +7,20 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p worker/tsconfig.json",
     "verify": "../LemmaScript/tools/check.sh dafny",
     "test": "node test/smoke.ts",
-    "test:browser": "node test/browser.mjs"
+    "test:browser": "node test/browser.mjs",
+    "db:init": "wrangler d1 execute quota --local --file=worker/schema.sql",
+    "worker:dev": "wrangler dev",
+    "test:api": "node test/api.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260525.1",
     "@tailwindcss/vite": "^4.1.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
@@ -24,6 +28,7 @@
     "playwright-core": "^1.60.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^6.0.3",
-    "vite": "^7.2.0"
+    "vite": "^7.2.0",
+    "wrangler": "^4.94.0"
   }
 }

@@ -1,0 +1,27 @@
+name = "quota"
+main = "worker/index.ts"
+compatibility_date = "2025-05-01"
+
+# The built SPA is served as static assets; the Worker handles /api/* and falls
+# through to assets for everything else.
+assets = { directory = "./dist", binding = "ASSETS" }
+
+# One Durable Object per page (idFromName(pageId)) — single-threaded, so it
+# serializes contended booking attempts into the NECESSARY total order, and
+# mutates its canonical Page only via the verified domain functions.
+[[durable_objects.bindings]]
+name = "QUOTA_PAGE"
+class_name = "QuotaPage"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["QuotaPage"]
+
+# D1 registry: accounts, unique handles, and vanity (username,pagename) -> page_id.
+[[d1_databases]]
+binding = "DB"
+database_name = "quota"
+database_id = "local-dev-placeholder"
+
+# Secret (set with `wrangler secret put AUTH_SECRET`); a dev default is used by
+# wrangler dev via .dev.vars. Never commit a real secret.
