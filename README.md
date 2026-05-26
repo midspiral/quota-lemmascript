@@ -84,46 +84,27 @@ running server (and Chrome for the latter).
 
 ## Deploy to production (Cloudflare)
 
-1. **Create the D1 database** and put its id in `wrangler.toml`:
-   ```sh
-   wrangler d1 create quota          # copy the database_id into [[d1_databases]]
-   wrangler d1 execute quota --remote --file=worker/schema.sql
-   ```
-2. **Set the auth secret** (used to sign tokens — never commit it):
-   ```sh
-   wrangler secret put AUTH_SECRET
-   ```
-3. **Enable real magic links via Stytch** (a hosted auth provider — it handles email delivery,
-   one-time-use, expiry, and rate limiting). Create a Stytch project, allow your redirect URL
-   (`https://<your-app>/#/auth`) in its dashboard, and set the Worker secrets:
-   ```sh
-   wrangler secret put STYTCH_PROJECT_ID
-   wrangler secret put STYTCH_SECRET
-   # optional: STYTCH_API_URL=https://api.stytch.com/v1 for the live env (default is test)
-   ```
-   In the Stytch dashboard, add your origin to **Redirect URLs** (Login + Signup) — exactly the
-   URL the Worker sends, e.g. `http://localhost:8787/` for local and `https://<your-domain>/` for
-   prod (Stytch appends its own `?token=…`; the SPA completes sign-in from that, recovering
-   `returnTo` from `localStorage`). **Heads-up:** on a new Stytch project, email magic links only
-   send **to your own account address (or same-domain coworkers)** until you add billing — so
-   test with the email you signed up to Stytch with.
+See **[`DEPLOY.md`](DEPLOY.md)** for the full copy-pasteable runbook — `wrangler login`, create +
+migrate the remote D1, set secrets (`AUTH_SECRET`, Stytch keys), `npm run deploy`, allowlist the
+deployed origin in Stytch, and a live smoke test. In short:
 
-   With the `STYTCH_*` secrets **unset**, the Worker uses its built-in **keyless HMAC** link and
-   returns it in the response (dev behavior) — so `npm run dev` / `worker:dev` need no account,
-   and the automated `test:api` / `test:browser` (which use the dev link) run green. The client
-   is unchanged either way (auth lives behind the `Auth` seam). See `DESIGN_CLOUDFLARE.md §4`.
-4. **Deploy:**
-   ```sh
-   npm run deploy     # VITE_REMOTE=1 vite build && wrangler deploy
-   ```
+```sh
+npx wrangler login
+npx wrangler d1 create quota                                   # paste the id into wrangler.toml
+npx wrangler d1 execute quota --remote --file=worker/schema.sql
+npx wrangler secret put AUTH_SECRET                            # + STYTCH_PROJECT_ID / STYTCH_SECRET
+npm run deploy
+```
 
-The Worker serves the built SPA (`dist/`) and `/api/*`; one Durable Object is created per page
-on demand. See `DESIGN_CLOUDFLARE.md` for the architecture and the open items (tentative
-holds/TTL, rate-limiting, swapping in a hosted auth provider).
+With the `STYTCH_*` secrets **unset**, the Worker uses its built-in **keyless HMAC** link
+(dev behavior) — so `npm run dev` / `worker:dev` need no account, and the automated
+`test:api` / `test:browser` run green. The client is unchanged either way (auth lives behind the
+`Auth` seam). The Worker serves the built SPA (`dist/`) + `/api/*`; one Durable Object is created
+per page on demand.
 
 ## What's verified vs. trusted
 
-**Verified** (`domain.ts`, 71 Dafny VCs, 0 errors): the booking decision and the count behind
+**Verified** (`domain.ts`, 76 Dafny VCs, 0 errors): the booking decision and the count behind
 it — never oversold, accept-iff-room, conservation, cancellation frees seats, replay
 determinism, and order-invariance of availability under contention. **Trusted** (stated
 honestly): auth, the React UI, WebSocket/DO/D1 I/O, email, slot date/time labeling, and
