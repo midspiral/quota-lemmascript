@@ -21,9 +21,8 @@ new_sqlite_classes = ["QuotaPage"]
 [[d1_databases]]
 binding = "DB"
 database_name = "quota"
-# Local `wrangler dev` ignores this id. Before deploying, run `wrangler d1 create quota`
-# and paste the real id here (see DEPLOY.md step 2).
-database_id = "local-dev-placeholder"
+# Local `wrangler dev` ignores this id; deploy validates it against your account.
+database_id = "4f299c2f-4164-4554-9aae-bfa2beb440e7"
 
 # Secret (set with `wrangler secret put AUTH_SECRET`); a dev default is used by
 # wrangler dev via .dev.vars. Never commit a real secret.
