@@ -268,7 +268,7 @@ Grouped into families and sequenced into stages. We design the model now so ever
 reachable; we prove them in order. Spec sketches use LemmaScript syntax (`forall(k, P)`,
 `\result`, no `\old`; each `//@ ensures` becomes a *separate* `_ensures` lemma, so functions
 are **pure recursive** and the kernel is **total**). **Stages 0, 0b, 1, 2, 2b, 3 (Families A, B,
-C, G, D, F, E) are implemented and verified** (`src/domain.ts`, 76 Dafny VCs, 0 errors); those specs below are the
+C, G, D, F, E) are implemented and verified** (`src/domain.ts`, 80 Dafny VCs, 0 errors); those specs below are the
 real ones. The remaining stages are _planned_ — their sketches are the intended specs, pinned
 during implementation.
 
@@ -502,6 +502,7 @@ function closeSlot(p: Page, idx: number): Page
 | **2b — order boundary** | `bookCountOrderInvariant`: two booking attempts, applied in **either order**, leave every slot's `confirmedCount` identical — *even under contention* (the loser is rejected either way, so the count saturates the same). Built from `bookDelta` (per-attempt count delta) + `keyHoldsSnoc`/`keyHoldsAfterBook`. The exact formal "Quorum-inversion": availability/safety is order-free (no locking), only *which booker wins* is order-sensitive (fairness needs the serializer). | D | ✅ **verified** (71 VCs, 0 errors) |
 | **3 — queries** | `bookersOf` (length === count), `availableSlots` (per-slot room mask, exact), `soldOut` (iff no slot has room). | F | ✅ **verified** (67 VCs, 0 errors) |
 | **3b — export faithfulness** | `confirmedOnly` + `confirmedOnlyPreservesCount` (E1: dropping cancelled bookings preserves every slot's count); `exportPage`/`availableSlotsOverExport` (E2: availability is identical over the export — query-over-export soundness). The export carries the verified-confirmed bookings; a query re-run over them yields the booker's answer. | E | ✅ **verified** (76 VCs, 0 errors) |
+| **2c — full permutation invariance** | `confirmedCountPerm` (`perm(xs, ys) ==> confirmedCount` agrees) and `hasRoomPermInvariant` (same slots + permuted log ⇒ same `hasRoom`) — the N-attempt closure of 2b, via the `perm(...)` predicate added to LemmaScript; proof reuses `confirmedCountConcat` as a remove-at-index step. | D | ✅ **verified** (80 VCs, 0 errors) |
 | **4 — richness (optional)** | Waitlist (rejected → FIFO queue; cancel promotes the head, capacity still safe) — adds promotion semantics + FIFO/served-≤-capacity proofs. Per-slot booking windows (open/close times) as shell + a verified "closed ⇒ no accept" guard. | (extends B/C) | _deferred_ |
 
 Each stage is shippable; the safety core is trustworthy after Stage 0, with the proof surface
