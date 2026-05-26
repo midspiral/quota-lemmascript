@@ -104,9 +104,12 @@ per page on demand.
 
 ## What's verified vs. trusted
 
-**Verified** (`domain.ts`, 76 Dafny VCs, 0 errors): the booking decision and the count behind
+**Verified** (`domain.ts`, 80 Dafny VCs, 0 errors): the booking decision and the count behind
 it — never oversold, accept-iff-room, conservation, cancellation frees seats, replay
-determinism, and order-invariance of availability under contention. **Trusted** (stated
+determinism, and order-invariance of availability under contention — now in full generality:
+`confirmedCountPerm` / `hasRoomPermInvariant` prove availability depends only on the *multiset*
+of the booking log (any reordering, not just the pairwise swap), via the `perm(...)` predicate
+added to LemmaScript. **Trusted** (stated
 honestly): auth, the React UI, WebSocket/DO/D1 I/O, email, slot date/time labeling, and
 abuse/rate-limiting. The same `domain.ts` runs in the browser and in the Durable Object — one
 core, no drift.

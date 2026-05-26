@@ -405,9 +405,16 @@ booker wins** the contended seat — i.e. *fairness* — and that is exactly wha
 order provides. This is the precise, mechanized statement of "Quota is Quorum inverted."
 
 Full element-permutation invariance over an N-attempt batch (vs. the pairwise statement above)
-would need `multiset` in specs — not expressible today, the same gap Quorum noted; the pairwise
-order-invariance + the concat-homomorphism are the expressible core, and they already license
-the architecture (any reordering is a sequence of adjacent swaps, each count-preserving).
+is now **verified**, not just argued: LemmaScript gained a spec-only `perm(a, b)` predicate
+(lowering to Dafny's `multiset(a) == multiset(b)`) to close the gap Quorum first noted.
+`confirmedCountPerm` (`perm(xs, ys) ==> confirmedCount(xs, idx) === confirmedCount(ys, idx)`)
+proves the count depends only on the multiset of the log; `hasRoomPermInvariant` lifts it to
+the product-visible observable — two pages with the same slots and a permuted booking log agree
+on `hasRoom` at every slot. So "availability is order-free" is mechanized for *any* reordering,
+not just the pairwise swap. The proof reuses the concat-homomorphism `confirmedCountConcat` as a
+remove-at-index step (the adjacent-swaps argument, now discharged inductively rather than left
+in prose). The identity of *which* contender wins remains the order-sensitive part the
+serializer pins — that line is unchanged.
 
 ### Family E — Export faithfulness & query soundness — **implemented & verified**
 The export carries only the **confirmed** bookings (cancelled ones are noise for availability).
