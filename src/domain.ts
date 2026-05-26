@@ -581,3 +581,33 @@ export function bookCountOrderInvariant(
   //@ ensures confirmedCount(tryBook(tryBook(p, i1, id1, k1, q1).page, i2, id2, k2, q2).page.bookings, s) === confirmedCount(tryBook(tryBook(p, i2, id2, k2, q2).page, i1, id1, k1, q1).page.bookings, s)
   return true
 }
+
+// ── Convergence (Family D-perm): full permutation invariance of the count ──
+//
+// confirmedCountConcat gives order-independence for two *batches*; `perm(...)`
+// lifts it to ANY reordering of the booking log. This is the complete
+// element-level statement of "a fixed set of confirmed bookings is order-free"
+// that was previously inexpressible — `//@` specs could not name a multiset, so
+// the concat-homomorphism was the strongest substitute. bookCountOrderInvariant
+// above is the pairwise case; this is its N-attempt closure (any permutation is
+// a sequence of adjacent swaps, each count-preserving). (Proof in the companion
+// .dfy: a remove-one-element induction reusing confirmedCountConcat.)
+export function confirmedCountPerm(xs: Booking[], ys: Booking[], idx: number): boolean {
+  //@ verify
+  //@ requires perm(xs, ys)
+  //@ ensures confirmedCount(xs, idx) === confirmedCount(ys, idx)
+  return true
+}
+
+// Lifted to the observable that the product acts on: availability. Two pages
+// with the same slots whose booking logs are permutations of each other agree
+// on hasRoom at every slot — reordering how the log accumulated never changes
+// what is available. (Only *which* contender won is order-sensitive; that is
+// what the serializer pins, and it is the reason it is needed for fairness.)
+export function hasRoomPermInvariant(a: Page, b: Page, idx: number): boolean {
+  //@ verify
+  //@ requires a.slots === b.slots
+  //@ requires perm(a.bookings, b.bookings)
+  //@ ensures hasRoom(a, idx) === hasRoom(b, idx)
+  return true
+}
