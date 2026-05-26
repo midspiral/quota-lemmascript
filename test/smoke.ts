@@ -3,7 +3,8 @@
 import {
   tryBook, cancel, remaining, wellFormed, confirmedCount, hasRoom,
   initPage, addSlot, setCapacity, closeSlot, capacityAt,
-  replay, bookersOf, availableSlots, soldOut, type Page, type Op,
+  replay, bookersOf, availableSlots, soldOut, confirmedOnly, exportPage,
+  type Page, type Op,
 } from "../src/domain.ts"
 
 let failures = 0
@@ -142,6 +143,18 @@ check(confirmedCount(ab.bookings, 0) === confirmedCount(ba.bookings, 0),
 check(confirmedCount(ab.bookings, 0) === 1, "exactly one seat filled, either order")
 check(bookersOf(ab, 0)[0].key !== bookersOf(ba, 0)[0].key,
   "but the WINNER depends on order (only fairness needs the serializer)")
+
+// ── Export faithfulness (Stage 3b) ────────────────────────────
+
+// Book a 2-capacity slot twice, cancel one. The export drops the cancelled
+// booking but preserves the count → availability is identical.
+let e = initPage("e1", "Export demo", [{ label: "A", capacity: 2 }])
+e = tryBook(e, 0, "e-1", "alice", 1).page
+e = tryBook(e, 0, "e-2", "bob", 2).page
+e = cancel(e, "e-1") // alice cancels
+check(confirmedOnly(e.bookings).length === 1, "exportPage drops the cancelled booking (1 confirmed left)")
+check(confirmedCount(exportPage(e).bookings, 0) === confirmedCount(e.bookings, 0), "export preserves the slot count")
+check(remaining(exportPage(e), 0) === remaining(e, 0), "availability identical over the export")
 
 if (failures === 0) {
   console.log("\nAll smoke checks passed.")

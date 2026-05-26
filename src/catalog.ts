@@ -4,6 +4,7 @@ import type { Page, Slot } from "./domain"
 import { initPage } from "./domain"
 import { load, save, pageKey, uid } from "./persist"
 import { localNameFor } from "./profile"
+import { toNdjson } from "./exportFormat"
 
 export interface PageRef {
   username: string
@@ -25,6 +26,7 @@ export interface Catalog {
   // throws if the (handle, pagename) slug is already taken
   createPage(handle: string, pagename: string, title: string, slots: Slot[]): Promise<PageRef>
   bookers(pageId: string): Promise<BookerInfo[]>
+  exportNdjson(pageId: string): Promise<string>
 }
 
 export function slugify(s: string): string {
@@ -58,5 +60,11 @@ export const localCatalog: Catalog = {
     return page.bookings
       .filter((b) => b.status === "confirmed")
       .map((b) => ({ slotIdx: b.slotIdx, email: b.key, name: localNameFor(b.key) || b.key, bookingId: b.id }))
+  },
+  async exportNdjson(pageId) {
+    const ref = allRefs().find((r) => r.pageId === pageId)
+    const page = load<Page | null>(pageKey(pageId), null)
+    if (page === null || ref === undefined) return ""
+    return toNdjson(page, ref.username, ref.pagename, (email) => localNameFor(email) || email)
   },
 }

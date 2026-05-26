@@ -9,7 +9,11 @@
 //
 // Auth & registry are the trusted edge (outside the verified core).
 import type { Page, Slot, Booking } from "../src/domain"
-import { initPage, tryBook, cancel, addSlot, setCapacity, closeSlot, confirmedCount } from "../src/domain"
+import {
+  initPage, tryBook, cancel, addSlot, setCapacity, closeSlot,
+  confirmedCount, capacityAt, remaining, availableSlots, soldOut,
+} from "../src/domain"
+import { toNdjson } from "../src/exportFormat"
 import type { StytchConfig } from "./stytch"
 import { stytchEnabled, stytchSendMagicLink, stytchAuthenticate } from "./stytch"
 
@@ -250,6 +254,31 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
       const body = await req.text()
       return callDO(env, pageId, `/${action}`, { method: "POST", body })
     }
+    if (action === "query" && method === "GET") {
+      if (!owns) return bad("not your page", 403)
+      return callDO(env, pageId, "/summary") // verified functions run over the corpus
+    }
+    if (action === "export.ndjson" && method === "GET") {
+      if (!owns) return bad("not your page", 403)
+      const res = await callDO(env, pageId, "/full")
+      const { page } = (await res.json()) as { page: Page }
+      const emails = [...new Set(page.bookings.filter((b) => b.status === "confirmed").map((b) => b.key))]
+      const names: Record<string, string> = {}
+      for (const e of emails) {
+        const acc = await env.DB.prepare("SELECT name FROM accounts WHERE email = ?").bind(e).first<{ name: string }>()
+        names[e] = acc?.name !== undefined && acc.name !== "" ? acc.name : e
+      }
+      const ref = await env.DB.prepare("SELECT username, pagename FROM pages WHERE page_id = ?")
+        .bind(pageId)
+        .first<{ username: string; pagename: string }>()
+      const body = toNdjson(page, ref?.username ?? "", ref?.pagename ?? "", (e) => names[e] ?? e)
+      return new Response(body, {
+        headers: {
+          "content-type": "application/x-ndjson",
+          "content-disposition": `attachment; filename="${ref?.pagename ?? "quota"}.ndjson"`,
+        },
+      })
+    }
     if (action === "bookers" && method === "GET") {
       if (!owns) return bad("not your page", 403)
       const res = await callDO(env, pageId, "/bookers")
@@ -359,6 +388,19 @@ export class QuotaPage {
         .filter((b) => b.status === "confirmed")
         .map((b) => ({ slotIdx: b.slotIdx, email: b.key, bookingId: b.id }))
       return json({ bookings })
+    }
+    if (path === "/full") return json({ page }) // owner-only (Worker-gated); raw page for export
+    if (path === "/summary") {
+      // The "trustworthy query": the verified functions, run over the corpus.
+      const avail = availableSlots(page)
+      const slots = page.slots.map((s, i) => ({
+        label: s.label,
+        capacity: capacityAt(page.slots, i),
+        confirmed: confirmedCount(page.bookings, i),
+        remaining: remaining(page, i),
+        available: avail[i],
+      }))
+      return json({ slots, soldOut: soldOut(page) })
     }
 
     return bad("not found", 404)

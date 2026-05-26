@@ -492,6 +492,47 @@ export function soldOut(p: Page): boolean {
   return noneAvailUpto(p, p.slots.length)
 }
 
+// ── Export faithfulness (Stage 3b / Family E) ─────────────────
+//
+// The export carries only the CONFIRMED bookings (cancelled ones are noise for
+// availability). The proofs show this loses nothing a query depends on: every
+// slot's count — and hence availableSlots/soldOut — is identical over the export
+// and the live page. So "query over the export === the answer the booker saw".
+
+// Keep only confirmed bookings.
+export function confirmedOnly(bs: Booking[]): Booking[] {
+  //@ verify
+  //@ decreases bs.length
+  if (bs.length === 0) return []
+  if (bs[0].status === "confirmed") return [bs[0], ...confirmedOnly(bs.slice(1))]
+  return confirmedOnly(bs.slice(1))
+}
+
+// E1: dropping cancelled bookings never changes a slot's confirmed count.
+export function confirmedOnlyPreservesCount(bs: Booking[], idx: number): boolean {
+  //@ verify
+  //@ decreases bs.length
+  //@ ensures confirmedCount(confirmedOnly(bs), idx) === confirmedCount(bs, idx)
+  return true
+}
+
+// The exported page: same slots, confirmed bookings only.
+export function exportPage(p: Page): Page {
+  //@ verify
+  //@ ensures \result.slots === p.slots
+  return { ...p, bookings: confirmedOnly(p.bookings) }
+}
+
+// E2: availability is identical over the export and the live page (query-over-
+// export soundness — the round-trip preserves every observable answer).
+export function availableSlotsOverExport(p: Page): boolean {
+  //@ verify
+  //@ ensures availableSlots(exportPage(p)).length === p.slots.length
+  //@ ensures availableSlots(p).length === p.slots.length
+  //@ ensures forall(j, 0 <= j && j < p.slots.length ==> availableSlots(exportPage(p))[j] === availableSlots(p)[j])
+  return true
+}
+
 // ── Order boundary (Stage 2b / Family D headline) ─────────────
 //
 // The precise formal sense of "Quota is Quorum inverted": the AGGREGATE

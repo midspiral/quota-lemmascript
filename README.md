@@ -45,7 +45,9 @@ npm run dev          # → http://localhost:5173
 
 Sign in (**email only** → click the on-screen dev link) → optionally set a display name on the
 **Account** page → **New page** → add slots → share the public link → book a slot. The display
-name is an optional profile setting (providers see it, or your email if unset). See `DESIGN_APP.md`.
+name is an optional profile setting (providers see it, or your email if unset). Providers can
+**Export** a page's bookings as NDJSON from the editor (built on the verified `confirmedOnly`).
+See `DESIGN_APP.md`.
 
 ## Run it — on Cloudflare (real multi-device)
 

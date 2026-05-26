@@ -1,7 +1,7 @@
 // RemoteCatalog: the registry over the D1-backed Worker. Same interface as
 // localCatalog (handle/slug uniqueness is enforced server-side by D1).
 import type { Catalog, PageRef, BookerInfo } from "./catalog"
-import { apiGet, apiPost } from "./api"
+import { apiGet, apiPost, getToken } from "./api"
 
 export const remoteCatalog: Catalog = {
   async listPages() {
@@ -29,5 +29,12 @@ export const remoteCatalog: Catalog = {
   async bookers(pageId) {
     const r = await apiGet<{ bookers: BookerInfo[] }>(`/api/pages/${pageId}/bookers`)
     return r.data?.bookers ?? []
+  },
+  async exportNdjson(pageId) {
+    const token = getToken()
+    const r = await fetch(`/api/pages/${pageId}/export.ndjson`, {
+      headers: token === null ? {} : { authorization: `Bearer ${token}` },
+    })
+    return r.ok ? await r.text() : ""
   },
 }

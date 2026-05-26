@@ -128,9 +128,11 @@ per the app's current model).
 - **Manage** (authenticated **and** page owner): `POST …/slots`, `…/capacity`, `…/close`,
   `GET …/bookers` (full names/emails — provider only). The Worker checks the token's account
   owns the page's `username` before forwarding to the DO.
-- **Export**: `GET /api/pages/:id/export.ndjson` (owner-authed; PII included) streams the
-  bookings; `replay` determinism makes re-export reproducible. Public export, if offered, is
-  counts-only.
+- **Export / query** (built, owner-authed): `GET …/export.ndjson` streams a page header + one
+  line per **confirmed** booking (PII: names joined from D1) — built on the **verified
+  `confirmedOnly`**, so the export is provably faithful (Stage 3b). `GET …/query` returns the
+  per-slot summary computed by the **verified functions over the corpus** (`availableSlots`/
+  `confirmedCount`/`remaining`/`soldOut`) — the trustworthy answer, same as the booker saw.
 
 ## 6. Privacy & trust boundary (restated)
 

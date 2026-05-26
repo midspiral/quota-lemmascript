@@ -268,7 +268,7 @@ Grouped into families and sequenced into stages. We design the model now so ever
 reachable; we prove them in order. Spec sketches use LemmaScript syntax (`forall(k, P)`,
 `\result`, no `\old`; each `//@ ensures` becomes a *separate* `_ensures` lemma, so functions
 are **pure recursive** and the kernel is **total**). **Stages 0, 0b, 1, 2, 2b, 3 (Families A, B,
-C, G, D, F) are implemented and verified** (`src/domain.ts`, 71 Dafny VCs, 0 errors); those specs below are the
+C, G, D, F, E) are implemented and verified** (`src/domain.ts`, 76 Dafny VCs, 0 errors); those specs below are the
 real ones. The remaining stages are _planned_ — their sketches are the intended specs, pinned
 during implementation.
 
@@ -409,17 +409,23 @@ would need `multiset` in specs — not expressible today, the same gap Quorum no
 order-invariance + the concat-homomorphism are the expressible core, and they already license
 the architecture (any reordering is a sequence of adjacent swaps, each count-preserving).
 
-### Family E — Export faithfulness & query soundness
-Export is the **append-only op log**; faithfulness is **replay round-trip** + determinism:
+### Family E — Export faithfulness & query soundness — **implemented & verified**
+The export carries only the **confirmed** bookings (cancelled ones are noise for availability).
+The proofs show this is faithful — every slot's count, and hence availability, is identical over
+the export and the live page, so "query over the export === the answer the booker saw":
 
 ```ts
-// E1 round-trip: replaying a page's own op log over the initial page reconstructs it.
-//@ ensures replay(initPage(p.id, p.title, p.slots), opsOf(p)) === p
-function replayRoundTrip(p: Page): boolean { return true }
+// E1: dropping cancelled bookings never changes a slot's confirmed count.
+//@ ensures confirmedCount(confirmedOnly(bs), idx) === confirmedCount(bs, idx)
+function confirmedOnlyPreservesCount(bs: Booking[], idx: number): boolean { return true }
+
+// E2: availableSlots is identical over the export and the live page (query soundness).
+//@ ensures forall(j, 0 <= j && j < p.slots.length ==> availableSlots(exportPage(p))[j] === availableSlots(p)[j])
+function availableSlotsOverExport(p: Page): boolean { return true }
 ```
-- **E2 (query-over-export soundness)** — corollary of E1 + purity: for any query `Q`,
-  `Q(replay(init, exportedOps)) === Q(p)`. Stated directly for `availableSlots`, `soldOut`,
-  `bookersOf`.
+The shipped feature uses the **verified `confirmedOnly`** to build the NDJSON export
+(`GET /api/pages/:id/export.ndjson`), and the query endpoint (`GET …/query`) runs the verified
+functions over the corpus.
 - **E3 (append-only integrity)** — enforced at D1 by `PRIMARY KEY (page_id, seq)`; the corpus
   is immutable and re-export is deterministic (DB-enforced, a trusted mechanism).
 - **E4 (canonical encoding)** — `encode` is a function (same page → same bytes), so exports
@@ -488,7 +494,7 @@ function closeSlot(p: Page, idx: number): Page
 | **2 — op model + replay** | `Op`/`applyOp`/`replay` (total) + `applyOpPreservesInv`/`replayPreservesInv` (every reachable state well-formed); `confirmedCountConcat` count homomorphism + `confirmedCountComm` batch commutativity. | D (core) | ✅ **verified** (53 VCs, 0 errors) |
 | **2b — order boundary** | `bookCountOrderInvariant`: two booking attempts, applied in **either order**, leave every slot's `confirmedCount` identical — *even under contention* (the loser is rejected either way, so the count saturates the same). Built from `bookDelta` (per-attempt count delta) + `keyHoldsSnoc`/`keyHoldsAfterBook`. The exact formal "Quorum-inversion": availability/safety is order-free (no locking), only *which booker wins* is order-sensitive (fairness needs the serializer). | D | ✅ **verified** (71 VCs, 0 errors) |
 | **3 — queries** | `bookersOf` (length === count), `availableSlots` (per-slot room mask, exact), `soldOut` (iff no slot has room). | F | ✅ **verified** (67 VCs, 0 errors) |
-| **3b — export faithfulness** | `replayRoundTrip` (E1, needs op-reconstruction from a materialized page), query-over-export soundness (E2), canonical encoding (E4). | E | _planned_ |
+| **3b — export faithfulness** | `confirmedOnly` + `confirmedOnlyPreservesCount` (E1: dropping cancelled bookings preserves every slot's count); `exportPage`/`availableSlotsOverExport` (E2: availability is identical over the export — query-over-export soundness). The export carries the verified-confirmed bookings; a query re-run over them yields the booker's answer. | E | ✅ **verified** (76 VCs, 0 errors) |
 | **4 — richness (optional)** | Waitlist (rejected → FIFO queue; cancel promotes the head, capacity still safe) — adds promotion semantics + FIFO/served-≤-capacity proofs. Per-slot booking windows (open/close times) as shell + a verified "closed ⇒ no accept" guard. | (extends B/C) | _deferred_ |
 
 Each stage is shippable; the safety core is trustworthy after Stage 0, with the proof surface

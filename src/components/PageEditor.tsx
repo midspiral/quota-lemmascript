@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import type { Session } from "../auth"
-import { loadStore } from "../config"
+import { loadStore, catalog } from "../config"
 import { usePage, usePageRef, useBookers } from "../useQuota"
 import { NotFound } from "./NotFound"
 import { Bar, Button, Card, Input } from "./ui"
@@ -51,6 +51,17 @@ function EditorInner({ pageId, username, pagename }: { pageId: string; username:
     }
   }
 
+  // Export confirmed bookings as NDJSON (built on the verified `confirmedOnly`).
+  async function exportBookings(): Promise<void> {
+    const text = await catalog.exportNdjson(pageId)
+    const url = URL.createObjectURL(new Blob([text], { type: "application/x-ndjson" }))
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${pagename}.ndjson`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   if (q.page === null) {
     return <p className="mx-auto max-w-2xl px-5 py-24 text-center text-sm text-stone-400">Loading…</p>
   }
@@ -69,9 +80,14 @@ function EditorInner({ pageId, username, pagename }: { pageId: string; username:
             {copied ? "copied!" : `${username}/${pagename} · copy link`}
           </button>
         </div>
-        <Button variant="ghost" onClick={() => navigate(bookingHref(username, pagename))}>
-          View public page
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="ghost" onClick={() => void exportBookings()}>
+            Export
+          </Button>
+          <Button variant="ghost" onClick={() => navigate(bookingHref(username, pagename))}>
+            View public page
+          </Button>
+        </div>
       </div>
 
       <div className="mt-8 space-y-3">

@@ -93,5 +93,22 @@ const confirmed = bk.filter((b) => b.status === "confirmed")
 if (confirmed.length === 1 && confirmed[0].key === "") ok("redaction: count visible, other booker's key hidden")
 else fail(`bob state: ${JSON.stringify(bk)}`)
 
+// 10. NDJSON export (owner): a page header line + the confirmed booking with the joined name
+const exp = await fetch(`${BASE}/api/pages/${pageId}/export.ndjson`, { headers: { authorization: `Bearer ${sam.token}` } })
+const ndjson = await exp.text()
+if (exp.status === 200 && ndjson.includes('"type":"page"') && ndjson.includes('"name":"Sam"')) ok("export.ndjson: page header + booker name")
+else fail(`export: ${exp.status} ${ndjson.slice(0, 160)}`)
+
+// 11. query endpoint: verified functions run over the corpus
+const q = await jget(`/api/pages/${pageId}/query`, sam.token)
+if (q.data?.slots?.[0]?.confirmed === 1 && q.data?.slots?.[0]?.remaining === 0 && q.data?.soldOut === true) {
+  ok("query: verified summary (confirmed=1, remaining=0, soldOut)")
+} else fail(`query: ${JSON.stringify(q.data)}`)
+
+// 12. non-owner is refused the export
+const expDenied = await fetch(`${BASE}/api/pages/${pageId}/export.ndjson`, { headers: { authorization: `Bearer ${bob.token}` } })
+if (expDenied.status === 403) ok("non-owner denied the export")
+else fail(`export as bob: ${expDenied.status}`)
+
 console.log(fails === 0 ? "\nAPI smoke passed." : `\n${fails} API check(s) failed.`)
 process.exit(fails === 0 ? 0 : 1)

@@ -707,6 +707,71 @@ lemma soldOut_ensures(p: Page)
   noneAvailUpto_ensures(p, |p.slots|);
 }
 
+function confirmedOnly(bs: seq<Booking>): seq<Booking>
+  decreases |bs|
+{
+  if (|bs| == 0) then
+    []
+  else
+    if bs[0].status.confirmed? then
+      ([bs[0]] + confirmedOnly(bs[1..]))
+    else
+      confirmedOnly(bs[1..])
+}
+
+function confirmedOnlyPreservesCount(bs: seq<Booking>, idx: int): bool
+  decreases |bs|
+{
+  true
+}
+
+lemma confirmedOnlyPreservesCount_ensures(bs: seq<Booking>, idx: int)
+  ensures (confirmedCount(confirmedOnly(bs), idx) == confirmedCount(bs, idx))
+{
+  // --- proof: induction on bs. A confirmed head is kept (its count contribution
+  // is preserved); a cancelled head contributes 0 to confirmedCount either way. ---
+  if (|bs| != 0) {
+    confirmedOnlyPreservesCount_ensures(bs[1..], idx);
+    if (bs[0].status.confirmed?) {
+      assert ([bs[0]] + confirmedOnly(bs[1..]))[1..] == confirmedOnly(bs[1..]);
+    }
+  }
+}
+
+function exportPage(p: Page): Page
+{
+  p.(bookings := confirmedOnly(p.bookings))
+}
+
+lemma exportPage_ensures(p: Page)
+  ensures (exportPage(p).slots == p.slots)
+{
+}
+
+function availableSlotsOverExport(p: Page): bool
+{
+  true
+}
+
+lemma availableSlotsOverExport_ensures(p: Page)
+  ensures (|availableSlots(exportPage(p))| == |p.slots|)
+  ensures (|availableSlots(p)| == |p.slots|)
+  ensures forall j: int :: ((0 <= j) ==> (j < |p.slots|) ==> (availableSlots(exportPage(p))[j] == availableSlots(p)[j]))
+{
+  // --- proof: exportPage keeps the slots (so capacities match) and the per-slot
+  // confirmed count is unchanged (confirmedOnlyPreservesCount), so hasRoom — and
+  // thus availableSlots — agrees pointwise. ---
+  availableSlots_ensures(exportPage(p));
+  availableSlots_ensures(p);
+  forall j: int | (0 <= j < |p.slots|)
+    ensures availableSlots(exportPage(p))[j] == availableSlots(p)[j]
+  {
+    confirmedOnlyPreservesCount_ensures(p.bookings, j);
+    hasRoom_ensures(exportPage(p), j);
+    hasRoom_ensures(p, j);
+  }
+}
+
 function keyHoldsSnoc(bs: seq<Booking>, b: Booking, idx: int, key: string): bool
   decreases |bs|
 {
