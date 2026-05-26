@@ -28,7 +28,7 @@ export function createRemoteAuth(): Auth {
     },
     async signInWithToken(token) {
       const r = await apiPost<{ session: Session; token: string }>("/api/auth/verify", { token })
-      if (r.status !== 200 || r.data === null) throw new Error("This sign-in link is invalid or has expired.")
+      if (r.status !== 200 || r.data === null) throw new Error("Sign-in failed. Please try again.")
       setToken(r.data.token)
       session = r.data.session
       save(SESSION, session)
