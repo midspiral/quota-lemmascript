@@ -30,8 +30,11 @@ export async function stytchSendMagicLink(c: StytchConfig, email: string, redire
         signup_magic_link_url: redirectUrl,
       }),
     })
-    return res.ok
-  } catch {
+    if (res.ok) return true
+    console.error("stytch send_magic_link failed:", res.status, await res.text().catch(() => ""))
+    return false
+  } catch (e) {
+    console.error("stytch send_magic_link threw:", String(e))
     return false
   }
 }
@@ -44,11 +47,15 @@ export async function stytchAuthenticate(c: StytchConfig, token: string): Promis
       headers: { authorization: basicAuth(c), "content-type": "application/json" },
       body: JSON.stringify({ token }),
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      console.error("stytch authenticate failed:", res.status, await res.text().catch(() => ""))
+      return null
+    }
     const data = (await res.json()) as { user?: { emails?: { email: string }[] } }
     const email = data.user?.emails?.[0]?.email
     return email !== undefined ? { email } : null
-  } catch {
+  } catch (e) {
+    console.error("stytch authenticate threw:", String(e))
     return null
   }
 }

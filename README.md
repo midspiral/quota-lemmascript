@@ -98,12 +98,17 @@ running server (and Chrome for the latter).
    wrangler secret put STYTCH_SECRET
    # optional: STYTCH_API_URL=https://api.stytch.com/v1 for the live env (default is test)
    ```
-   With these **unset**, the Worker uses its built-in **keyless HMAC** link and returns it in
-   the response (dev behavior) — so `npm run dev` / `worker:dev` need no account. The client is
-   unchanged either way (auth lives behind the `Auth` seam). See `DESIGN_CLOUDFLARE.md §4`.
-   *(The live Stytch path needs your keys to validate; the helpers are unit-tested via
-   `npm run test:stytch`, and the redirect-URL ↔ hash-routing detail is worth confirming against
-   your project.)*
+   In the Stytch dashboard, add your origin to **Redirect URLs** (Login + Signup) — exactly the
+   URL the Worker sends, e.g. `http://localhost:8787/` for local and `https://<your-domain>/` for
+   prod (Stytch appends its own `?token=…`; the SPA completes sign-in from that, recovering
+   `returnTo` from `localStorage`). **Heads-up:** on a new Stytch project, email magic links only
+   send **to your own account address (or same-domain coworkers)** until you add billing — so
+   test with the email you signed up to Stytch with.
+
+   With the `STYTCH_*` secrets **unset**, the Worker uses its built-in **keyless HMAC** link and
+   returns it in the response (dev behavior) — so `npm run dev` / `worker:dev` need no account,
+   and the automated `test:api` / `test:browser` (which use the dev link) run green. The client
+   is unchanged either way (auth lives behind the `Auth` seam). See `DESIGN_CLOUDFLARE.md §4`.
 4. **Deploy:**
    ```sh
    npm run deploy     # VITE_REMOTE=1 vite build && wrangler deploy

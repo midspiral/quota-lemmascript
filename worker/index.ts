@@ -147,7 +147,11 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
       // Stytch sends the email; remember the name now (its callback won't carry it).
       await upsertAccount(env, email, name)
       const origin = new URL(req.url).origin
-      const ok = await stytchSendMagicLink(cfg, email, `${origin}/#/auth?returnTo=${rt}`)
+      // Bare root URL — Stytch validates redirect URLs strictly (extra query params
+      // are rejected), and it appends its own ?token=…&stytch_token_type=… . The SPA
+      // completes sign-in from those, reading returnTo from localStorage (stashed by
+      // RemoteAuth before the round-trip).
+      const ok = await stytchSendMagicLink(cfg, email, `${origin}/`)
       return ok ? json({ sent: true }) : bad("could not send the sign-in email", 502)
     }
     // Keyless dev fallback: our own HMAC link, surfaced in the response.
