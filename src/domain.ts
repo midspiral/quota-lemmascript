@@ -74,6 +74,7 @@ export function holds(b: Booking, idx: number): boolean {
 // same function. (Quorum's countFree, re-pointed at bookings.)
 export function confirmedCount(bs: Booking[], idx: number): number {
   //@ verify
+  //@ contract A count between 0 and the number of bookings.
   //@ decreases bs.length
   //@ ensures 0 <= \result && \result <= bs.length
   if (bs.length === 0) return 0
@@ -84,6 +85,7 @@ export function confirmedCount(bs: Booking[], idx: number): number {
 // Capacity of slot `idx`, or 0 if out of range (TOTAL).
 export function capacityAt(slots: Slot[], idx: number): number {
   //@ verify
+  //@ contract The capacity of slot idx, or 0 if idx is out of range.
   //@ ensures (0 <= idx && idx < slots.length) ==> \result === slots[idx].capacity
   //@ ensures !(0 <= idx && idx < slots.length) ==> \result === 0
   if (idx < 0) return 0
@@ -94,6 +96,7 @@ export function capacityAt(slots: Slot[], idx: number): number {
 // Room at slot `idx` iff it's in range and its confirmed count is below capacity.
 export function hasRoom(p: Page, idx: number): boolean {
   //@ verify
+  //@ contract True exactly when slot idx is in range and its confirmed count is below its capacity.
   //@ ensures \result === (0 <= idx && idx < p.slots.length && confirmedCount(p.bookings, idx) < capacityAt(p.slots, idx))
   if (idx < 0) return false
   if (idx >= p.slots.length) return false
@@ -119,6 +122,7 @@ export function keyHolds(bs: Booking[], idx: number, key: string): boolean {
 // the quantified per-slot bound. (Quorum's allAvailLen pattern.)
 export function withinCapacityUpto(slots: Slot[], bs: Booking[], k: number): boolean {
   //@ verify
+  //@ contract Returns true only when each of the first k slots is within its capacity (sound; the converse is the separate completeness lemma).
   //@ requires 0 <= k && k <= slots.length
   //@ decreases k
   //@ ensures \result === true ==> forall(j, 0 <= j && j < k ==> confirmedCount(bs, j) <= slots[j].capacity)
@@ -131,6 +135,7 @@ export function withinCapacityUpto(slots: Slot[], bs: Booking[], k: number): boo
 // (Pure-carrier lemma; induction in the companion .dfy.)
 export function withinCapacityUptoComplete(slots: Slot[], bs: Booking[], k: number): boolean {
   //@ verify
+  //@ contract If every one of the first k slots is within its capacity, the within-capacity check returns true (completeness).
   //@ requires 0 <= k && k <= slots.length
   //@ requires forall(j, 0 <= j && j < k ==> confirmedCount(bs, j) <= slots[j].capacity)
   //@ decreases k
@@ -156,6 +161,7 @@ export function wellFormed(p: Page): boolean {
 // homomorphism the safety proof rests on. (Quorum's countFreeConcat analog.)
 export function confirmedCountSnoc(bs: Booking[], b: Booking, idx: number): boolean {
   //@ verify
+  //@ contract Appending a booking raises slot idx's confirmed count by one if that booking holds the slot, and leaves it unchanged otherwise.
   //@ ensures confirmedCount(bs.concat([b]), idx) === confirmedCount(bs, idx) + (holds(b, idx) ? 1 : 0)
   return true
 }
@@ -165,6 +171,7 @@ export function confirmedCountSnoc(bs: Booking[], b: Booking, idx: number): bool
 // capacity), every other slot is unchanged. (Pure-carrier; induction in .dfy.)
 export function withinCapacityUptoAppend(slots: Slot[], bs: Booking[], b: Booking, k: number): boolean {
   //@ verify
+  //@ contract Appending a booking to a within-capacity list keeps it within capacity, provided that slot still had room.
   //@ requires 0 <= k && k <= slots.length
   //@ requires withinCapacityUpto(slots, bs, k) === true
   //@ requires (0 <= b.slotIdx && b.slotIdx < slots.length) ==> confirmedCount(bs, b.slotIdx) < slots[b.slotIdx].capacity
@@ -182,6 +189,7 @@ export function withinCapacityUptoAppend(slots: Slot[], bs: Booking[], b: Bookin
 // Only "confirmed" mutates. A booker holding OTHER slots never affects this.
 export function tryBook(p: Page, idx: number, bookingId: string, key: string, seq: number): BookResult {
   //@ verify
+  //@ contract Honest accept/reject: the result is "duplicate" exactly when this key already booked the slot, "confirmed" exactly when it is not a duplicate and the slot has room, and the page is left unchanged unless it confirms.
   //@ ensures \result.page.slots === p.slots
   //@ ensures (\result.outcome === "duplicate") === keyHolds(p.bookings, idx, key)
   //@ ensures (\result.outcome === "confirmed") === (!keyHolds(p.bookings, idx, key) && hasRoom(p, idx))
@@ -196,6 +204,7 @@ export function tryBook(p: Page, idx: number, bookingId: string, key: string, se
 // resulting page is still well-formed.
 export function tryBookPreservesInv(p: Page, idx: number, bookingId: string, key: string, seq: number): boolean {
   //@ verify
+  //@ contract A booking attempt on a well-formed page never oversells — the resulting page is still well-formed for any outcome.
   //@ requires wellFormed(p)
   //@ ensures wellFormed(tryBook(p, idx, bookingId, key, seq).page)
   return true
@@ -208,6 +217,7 @@ export function tryBookPreservesInv(p: Page, idx: number, bookingId: string, key
 // length is unchanged (and replay/audit stays faithful).
 export function cancelById(bs: Booking[], bookingId: string): Booking[] {
   //@ verify
+  //@ contract A booking list of the same length as the input (the append-only log never shrinks).
   //@ decreases bs.length
   //@ ensures \result.length === bs.length
   if (bs.length === 0) return []
@@ -219,6 +229,7 @@ export function cancelById(bs: Booking[], bookingId: string): Booking[] {
 // untouched (reverse monotonicity). Proof by induction on bs. (Pure-carrier.)
 export function cancelMonotone(bs: Booking[], bookingId: string, idx: number): boolean {
   //@ verify
+  //@ contract Cancelling a booking never raises any slot's confirmed count.
   //@ decreases bs.length
   //@ ensures confirmedCount(cancelById(bs, bookingId), idx) <= confirmedCount(bs, idx)
   return true
@@ -228,6 +239,7 @@ export function cancelMonotone(bs: Booking[], bookingId: string, idx: number): b
 // down, so each stays within capacity. (Reverse-monotone ⇒ trivially safe.)
 export function cancel(p: Page, bookingId: string): Page {
   //@ verify
+  //@ contract A well-formed page with the same slots; the cancellation itself is not part of the proven contract.
   //@ requires wellFormed(p)
   //@ ensures wellFormed(\result)
   //@ ensures \result.slots === p.slots
@@ -238,6 +250,7 @@ export function cancel(p: Page, bookingId: string): Page {
 // well-formed page (where no slot is oversold) the remainder is never negative.
 export function remaining(p: Page, idx: number): number {
   //@ verify
+  //@ contract The seats left at slot idx — it plus the confirmed count equal the capacity, and it is never negative.
   //@ requires wellFormed(p)
   //@ requires 0 <= idx && idx < p.slots.length
   //@ ensures \result + confirmedCount(p.bookings, idx) === capacityAt(p.slots, idx)
@@ -253,6 +266,7 @@ export function remaining(p: Page, idx: number): number {
 
 export function allInRange(bs: Booking[], n: number): boolean {
   //@ verify
+  //@ contract Returns true only when every booking's slot index lies in the range [0, n) (the sound direction).
   //@ decreases bs.length
   //@ ensures \result === true ==> forall(i, 0 <= i && i < bs.length ==> 0 <= bs[i].slotIdx && bs[i].slotIdx < n)
   if (bs.length === 0) return true
@@ -264,6 +278,7 @@ export function allInRange(bs: Booking[], n: number): boolean {
 // Appending an in-range booking preserves A3.
 export function allInRangeSnoc(bs: Booking[], b: Booking, n: number): boolean {
   //@ verify
+  //@ contract Appending an in-range booking keeps every booking's slot index in range.
   //@ requires allInRange(bs, n)
   //@ requires 0 <= b.slotIdx && b.slotIdx < n
   //@ decreases bs.length
@@ -274,6 +289,7 @@ export function allInRangeSnoc(bs: Booking[], b: Booking, n: number): boolean {
 // Cancelling flips a status, never a slotIdx, so A3 survives a cancellation.
 export function allInRangeCancel(bs: Booking[], bookingId: string, n: number): boolean {
   //@ verify
+  //@ contract Cancelling a booking keeps every remaining booking's slot index in range.
   //@ requires allInRange(bs, n)
   //@ decreases bs.length
   //@ ensures allInRange(cancelById(bs, bookingId), n)
@@ -283,6 +299,7 @@ export function allInRangeCancel(bs: Booking[], bookingId: string, n: number): b
 // A3 widens: in range for n stays in range for any m >= n (used when a slot is added).
 export function allInRangeWiden(bs: Booking[], n: number, m: number): boolean {
   //@ verify
+  //@ contract If every booking's slot index is below n, it is also below any larger bound m.
   //@ requires allInRange(bs, n)
   //@ requires n <= m
   //@ decreases bs.length
@@ -294,6 +311,7 @@ export function allInRangeWiden(bs: Booking[], n: number, m: number): boolean {
 // (A freshly added slot at index n starts genuinely empty.)
 export function countZeroAtUnbooked(bs: Booking[], n: number, idx: number): boolean {
   //@ verify
+  //@ contract A slot index at or beyond the booked range has a confirmed count of zero — a freshly added slot starts empty.
   //@ requires allInRange(bs, n)
   //@ requires idx >= n
   //@ decreases bs.length
@@ -311,6 +329,7 @@ export function countZeroAtUnbooked(bs: Booking[], n: number, idx: number): bool
 // vacuously (every count is 0; no booking out of range).
 export function initPage(id: string, title: string, slots: Slot[]): Page {
   //@ verify
+  //@ contract A well-formed page with the given slots; that it starts empty is not part of the proven contract.
   //@ requires forall(j, 0 <= j && j < slots.length ==> slots[j].capacity >= 0)
   //@ ensures wellFormed(\result)
   //@ ensures \result.slots === slots
@@ -321,6 +340,7 @@ export function initPage(id: string, title: string, slots: Slot[]): Page {
 // new index (A3) — so it's within capacity and the page stays well-formed.
 export function addSlot(p: Page, label: string, newCap: number): Page {
   //@ verify
+  //@ contract A well-formed page; the slot addition itself is not part of the proven contract.
   //@ requires wellFormed(p)
   //@ requires newCap >= 0
   //@ ensures wellFormed(\result)
@@ -330,6 +350,7 @@ export function addSlot(p: Page, label: string, newCap: number): Page {
 // Replace the capacity of slot `idx`, leaving every other slot untouched.
 export function setCapAt(slots: Slot[], idx: number, newCap: number): Slot[] {
   //@ verify
+  //@ contract Sets slot idx's capacity to newCap, leaving every other slot unchanged.
   //@ decreases slots.length
   //@ ensures \result.length === slots.length
   //@ ensures forall(j, 0 <= j && j < slots.length && j !== idx ==> \result[j] === slots[j])
@@ -343,6 +364,7 @@ export function setCapAt(slots: Slot[], idx: number, newCap: number): Slot[] {
 // so a page can never be made retroactively oversold.
 export function setCapacity(p: Page, idx: number, newCap: number): Page {
   //@ verify
+  //@ contract A well-formed page with the same number of slots; the capacity change itself is not part of the proven contract.
   //@ requires wellFormed(p)
   //@ requires 0 <= idx && idx < p.slots.length
   //@ requires newCap >= confirmedCount(p.bookings, idx)
@@ -355,6 +377,7 @@ export function setCapacity(p: Page, idx: number, newCap: number): Page {
 // precondition of setCapacity holds trivially (count >= count), so it's safe.
 export function closeSlot(p: Page, idx: number): Page {
   //@ verify
+  //@ contract A well-formed page; the slot closure itself is not part of the proven contract.
   //@ requires wellFormed(p)
   //@ requires 0 <= idx && idx < p.slots.length
   //@ ensures wellFormed(\result)
@@ -379,6 +402,7 @@ type Op =
 // it composes inside replay with no precondition. It never touches the slots.
 export function applyOp(p: Page, op: Op): Page {
   //@ verify
+  //@ contract A page with the same slots; the op's effect on the bookings is not part of the proven contract.
   //@ ensures \result.slots === p.slots
   if (op.kind === "book") return tryBook(p, op.idx, op.bookingId, op.key, op.seq).page
   return { ...p, bookings: cancelById(p.bookings, op.bookingId) }
@@ -388,6 +412,7 @@ export function applyOp(p: Page, op: Op): Page {
 // monotonicity), so no op log can ever produce an oversold page.
 export function applyOpPreservesInv(p: Page, op: Op): boolean {
   //@ verify
+  //@ contract Applying any op to a well-formed page yields a well-formed page — no op log can produce an oversold page.
   //@ requires wellFormed(p)
   //@ ensures wellFormed(applyOp(p, op))
   return true
@@ -406,6 +431,7 @@ export function replay(p: Page, ops: Op[]): Page {
 // DO's stored state, and any re-export's replay, are always within capacity.
 export function replayPreservesInv(p: Page, ops: Op[]): boolean {
   //@ verify
+  //@ contract Replaying any op log over a well-formed page yields a well-formed page — every reachable state stays within capacity.
   //@ requires wellFormed(p)
   //@ decreases ops.length
   //@ ensures wellFormed(replay(p, ops))
@@ -418,6 +444,7 @@ export function replayPreservesInv(p: Page, ops: Op[]): boolean {
 // the formal sense in which a *fixed set* of confirmed bookings is order-free.
 export function confirmedCountConcat(xs: Booking[], ys: Booking[], idx: number): boolean {
   //@ verify
+  //@ contract The confirmed count over two concatenated booking lists equals the sum of their counts — additive over concatenation.
   //@ ensures confirmedCount(xs.concat(ys), idx) === confirmedCount(xs, idx) + confirmedCount(ys, idx)
   return true
 }
@@ -428,6 +455,7 @@ export function confirmedCountConcat(xs: Booking[], ys: Booking[], idx: number):
 // under contention is still order-sensitive — that's Stage 2b.)
 export function confirmedCountComm(xs: Booking[], ys: Booking[], idx: number): boolean {
   //@ verify
+  //@ contract A slot's confirmed count is the same whichever order two booking lists are concatenated.
   //@ ensures confirmedCount(xs.concat(ys), idx) === confirmedCount(ys.concat(xs), idx)
   return true
 }
@@ -443,6 +471,7 @@ export function confirmedCountComm(xs: Booking[], ys: Booking[], idx: number): b
 // list can never disagree with the cell's number.
 export function confirmedBookers(bs: Booking[], idx: number): Booking[] {
   //@ verify
+  //@ contract A list whose length equals slot idx's confirmed count.
   //@ decreases bs.length
   //@ ensures \result.length === confirmedCount(bs, idx)
   if (bs.length === 0) return []
@@ -452,6 +481,7 @@ export function confirmedBookers(bs: Booking[], idx: number): Booking[] {
 
 export function bookersOf(p: Page, idx: number): Booking[] {
   //@ verify
+  //@ contract A list whose length equals slot idx's confirmed count on the page.
   //@ ensures \result.length === confirmedCount(p.bookings, idx)
   return confirmedBookers(p.bookings, idx)
 }
@@ -459,6 +489,7 @@ export function bookersOf(p: Page, idx: number): Booking[] {
 // Per-slot availability mask, characterized exactly: entry j is `hasRoom(p, j)`.
 export function availableUpto(p: Page, k: number): boolean[] {
   //@ verify
+  //@ contract Marks, per slot, exactly which of the first k slots still have room.
   //@ requires 0 <= k && k <= p.slots.length
   //@ decreases k
   //@ ensures \result.length === k
@@ -470,6 +501,7 @@ export function availableUpto(p: Page, k: number): boolean[] {
 
 export function availableSlots(p: Page): boolean[] {
   //@ verify
+  //@ contract Marks, per slot, exactly which slots still have room.
   //@ ensures \result.length === p.slots.length
   //@ ensures forall(j, 0 <= j && j < p.slots.length ==> \result[j] === hasRoom(p, j))
   return availableUpto(p, p.slots.length)
@@ -478,6 +510,7 @@ export function availableSlots(p: Page): boolean[] {
 // "Is the whole page sold out?" — true iff no slot has room.
 export function noneAvailUpto(p: Page, k: number): boolean {
   //@ verify
+  //@ contract True exactly when none of the first k slots has room.
   //@ requires 0 <= k && k <= p.slots.length
   //@ decreases k
   //@ ensures \result === forall(j, 0 <= j && j < k ==> !hasRoom(p, j))
@@ -488,6 +521,7 @@ export function noneAvailUpto(p: Page, k: number): boolean {
 
 export function soldOut(p: Page): boolean {
   //@ verify
+  //@ contract True exactly when no slot has any room left.
   //@ ensures \result === forall(j, 0 <= j && j < p.slots.length ==> !hasRoom(p, j))
   return noneAvailUpto(p, p.slots.length)
 }
@@ -511,6 +545,7 @@ export function confirmedOnly(bs: Booking[]): Booking[] {
 // E1: dropping cancelled bookings never changes a slot's confirmed count.
 export function confirmedOnlyPreservesCount(bs: Booking[], idx: number): boolean {
   //@ verify
+  //@ contract Dropping the cancelled bookings never changes any slot's confirmed count.
   //@ decreases bs.length
   //@ ensures confirmedCount(confirmedOnly(bs), idx) === confirmedCount(bs, idx)
   return true
@@ -519,6 +554,7 @@ export function confirmedOnlyPreservesCount(bs: Booking[], idx: number): boolean
 // The exported page: same slots, confirmed bookings only.
 export function exportPage(p: Page): Page {
   //@ verify
+  //@ contract A page with the same slots; that only confirmed bookings are kept is not part of the proven contract.
   //@ ensures \result.slots === p.slots
   return { ...p, bookings: confirmedOnly(p.bookings) }
 }
@@ -527,6 +563,7 @@ export function exportPage(p: Page): Page {
 // export soundness — the round-trip preserves every observable answer).
 export function availableSlotsOverExport(p: Page): boolean {
   //@ verify
+  //@ contract Availability is identical over the exported page and the live page — a query over the export gives the same answer the booker saw.
   //@ ensures availableSlots(exportPage(p)).length === p.slots.length
   //@ ensures availableSlots(p).length === p.slots.length
   //@ ensures forall(j, 0 <= j && j < p.slots.length ==> availableSlots(exportPage(p))[j] === availableSlots(p)[j])
@@ -545,6 +582,7 @@ export function availableSlotsOverExport(p: Page): boolean {
 // exactly the (slot, key) it confirms to the "already holds" set.
 export function keyHoldsSnoc(bs: Booking[], b: Booking, idx: number, key: string): boolean {
   //@ verify
+  //@ contract Appending a booking adds exactly the (slot, key) it confirms to the "already holds" set, and nothing else.
   //@ decreases bs.length
   //@ ensures keyHolds(bs.concat([b]), idx, key) === (keyHolds(bs, idx, key) || (b.status === "confirmed" && b.slotIdx === idx && b.key === key))
   return true
@@ -554,6 +592,7 @@ export function keyHoldsSnoc(bs: Booking[], b: Booking, idx: number, key: string
 // attempt is accepted (not a duplicate, has room) AND targets s; else +0.
 export function bookDelta(p: Page, idx: number, bookingId: string, key: string, seq: number, s: number): boolean {
   //@ verify
+  //@ contract A single booking attempt raises slot s's count by one exactly when it is accepted (not a duplicate, has room) and targets s; otherwise it leaves the count unchanged.
   //@ ensures confirmedCount(tryBook(p, idx, bookingId, key, seq).page.bookings, s) === confirmedCount(p.bookings, s) + ((!keyHolds(p.bookings, idx, key) && hasRoom(p, idx) && idx === s) ? 1 : 0)
   return true
 }
@@ -562,6 +601,7 @@ export function bookDelta(p: Page, idx: number, bookingId: string, key: string, 
 // attempt was accepted there.
 export function keyHoldsAfterBook(p: Page, idx: number, bookingId: string, key: string, seq: number, s: number, k: string): boolean {
   //@ verify
+  //@ contract After a booking attempt, the (slot, key) set gains (idx, key) exactly when the attempt was accepted there.
   //@ ensures keyHolds(tryBook(p, idx, bookingId, key, seq).page.bookings, s, k) === (keyHolds(p.bookings, s, k) || (!keyHolds(p.bookings, idx, key) && hasRoom(p, idx) && idx === s && key === k))
   return true
 }
@@ -578,6 +618,7 @@ export function bookCountOrderInvariant(
   s: number,
 ): boolean {
   //@ verify
+  //@ contract Two booking attempts applied in either order leave every slot's confirmed count identical — even when they contend for the same slot — so availability is order-independent.
   //@ ensures confirmedCount(tryBook(tryBook(p, i1, id1, k1, q1).page, i2, id2, k2, q2).page.bookings, s) === confirmedCount(tryBook(tryBook(p, i2, id2, k2, q2).page, i1, id1, k1, q1).page.bookings, s)
   return true
 }
@@ -594,6 +635,7 @@ export function bookCountOrderInvariant(
 // .dfy: a remove-one-element induction reusing confirmedCountConcat.)
 export function confirmedCountPerm(xs: Booking[], ys: Booking[], idx: number): boolean {
   //@ verify
+  //@ contract Any permutation of the booking log leaves every slot's confirmed count unchanged.
   //@ requires perm(xs, ys)
   //@ ensures confirmedCount(xs, idx) === confirmedCount(ys, idx)
   return true
@@ -606,6 +648,7 @@ export function confirmedCountPerm(xs: Booking[], ys: Booking[], idx: number): b
 // what the serializer pins, and it is the reason it is needed for fairness.)
 export function hasRoomPermInvariant(a: Page, b: Page, idx: number): boolean {
   //@ verify
+  //@ contract Two pages with the same slots whose booking logs are permutations of each other agree on whether each slot has room.
   //@ requires a.slots === b.slots
   //@ requires perm(a.bookings, b.bookings)
   //@ ensures hasRoom(a, idx) === hasRoom(b, idx)

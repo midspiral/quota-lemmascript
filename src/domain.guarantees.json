@@ -1,0 +1,682 @@
+{
+  "file": "src/domain.ts",
+  "generated": "2026-06-16",
+  "assumesVerified": true,
+  "summary": {
+    "contracts": 43,
+    "confirmed": 43,
+    "disputed": 0,
+    "gaps": 0
+  },
+  "guarantees": [
+    {
+      "specId": "confirmedCount",
+      "function": "confirmedCount",
+      "requirement": "A count between 0 and the number of bookings.",
+      "spec": {
+        "signature": "confirmedCount(bs: Booking[], idx: number): number",
+        "requires": [],
+        "ensures": [
+          "0 <= \\result && \\result <= bs.length"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The confirmed count of bookings at a given index is a non-negative integer that does not exceed the length of the bookings array."
+    },
+    {
+      "specId": "capacityAt",
+      "function": "capacityAt",
+      "requirement": "The capacity of slot idx, or 0 if idx is out of range.",
+      "spec": {
+        "signature": "capacityAt(slots: Slot[], idx: number): number",
+        "requires": [],
+        "ensures": [
+          "(0 <= idx && idx < slots.length) ==> \\result === slots[idx].capacity",
+          "!(0 <= idx && idx < slots.length) ==> \\result === 0"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The capacity at a given index is either the capacity of the slot at that index (if the index is valid), or 0 (if the index is out of bounds)."
+    },
+    {
+      "specId": "hasRoom",
+      "function": "hasRoom",
+      "requirement": "True exactly when slot idx is in range and its confirmed count is below its capacity.",
+      "spec": {
+        "signature": "hasRoom(p: Page, idx: number): boolean",
+        "requires": [],
+        "ensures": [
+          "\\result === (0 <= idx && idx < p.slots.length && confirmedCount(p.bookings, idx) < capacityAt(p.slots, idx))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "A page has room at a given index if and only if the index is valid, the index is within the slots array bounds, and the confirmed count at that index is strictly less than the capacity at that index."
+    },
+    {
+      "specId": "withinCapacityUpto",
+      "function": "withinCapacityUpto",
+      "requirement": "Returns true only when each of the first k slots is within its capacity (sound; the converse is the separate completeness lemma).",
+      "spec": {
+        "signature": "withinCapacityUpto(slots: Slot[], bs: Booking[], k: number): boolean",
+        "requires": [
+          "0 <= k && k <= slots.length"
+        ],
+        "ensures": [
+          "\\result === true ==> forall(j, 0 <= j && j < k ==> confirmedCount(bs, j) <= slots[j].capacity)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "For all slots up to index k, if the function returns true, then the confirmed count at each slot does not exceed that slot's capacity."
+    },
+    {
+      "specId": "withinCapacityUptoComplete",
+      "function": "withinCapacityUptoComplete",
+      "requirement": "If every one of the first k slots is within its capacity, the within-capacity check returns true (completeness).",
+      "spec": {
+        "signature": "withinCapacityUptoComplete(slots: Slot[], bs: Booking[], k: number): boolean",
+        "requires": [
+          "0 <= k && k <= slots.length",
+          "forall(j, 0 <= j && j < k ==> confirmedCount(bs, j) <= slots[j].capacity)"
+        ],
+        "ensures": [
+          "withinCapacityUpto(slots, bs, k) === true"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If the confirmed count at each slot up to index k is already within capacity, then the withinCapacityUpto function returns true."
+    },
+    {
+      "specId": "confirmedCountSnoc",
+      "function": "confirmedCountSnoc",
+      "requirement": "Appending a booking raises slot idx's confirmed count by one if that booking holds the slot, and leaves it unchanged otherwise.",
+      "spec": {
+        "signature": "confirmedCountSnoc(bs: Booking[], b: Booking, idx: number): boolean",
+        "requires": [],
+        "ensures": [
+          "confirmedCount(bs.concat([b]), idx) === confirmedCount(bs, idx) + (holds(b, idx) ? 1 : 0)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "When a booking is appended to the bookings array, the confirmed count at a given index increases by 1 if the booking holds at that index, and remains unchanged otherwise."
+    },
+    {
+      "specId": "withinCapacityUptoAppend",
+      "function": "withinCapacityUptoAppend",
+      "requirement": "Appending a booking to a within-capacity list keeps it within capacity, provided that slot still had room.",
+      "spec": {
+        "signature": "withinCapacityUptoAppend(slots: Slot[], bs: Booking[], b: Booking, k: number): boolean",
+        "requires": [
+          "0 <= k && k <= slots.length",
+          "withinCapacityUpto(slots, bs, k) === true",
+          "(0 <= b.slotIdx && b.slotIdx < slots.length) ==> confirmedCount(bs, b.slotIdx) < slots[b.slotIdx].capacity"
+        ],
+        "ensures": [
+          "withinCapacityUpto(slots, bs.concat([b]), k) === true"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If bookings are within capacity up to index k, and a new booking does not exceed the capacity of its slot, then the bookings remain within capacity up to index k after appending the new booking."
+    },
+    {
+      "specId": "tryBook",
+      "function": "tryBook",
+      "requirement": "Honest accept/reject: the result is \"duplicate\" exactly when this key already booked the slot, \"confirmed\" exactly when it is not a duplicate and the slot has room, and the page is left unchanged unless it confirms.",
+      "spec": {
+        "signature": "tryBook(p: Page, idx: number, bookingId: string, key: string, seq: number): BookResult",
+        "requires": [],
+        "ensures": [
+          "\\result.page.slots === p.slots",
+          "(\\result.outcome === \"duplicate\") === keyHolds(p.bookings, idx, key)",
+          "(\\result.outcome === \"confirmed\") === (!keyHolds(p.bookings, idx, key) && hasRoom(p, idx))",
+          "(\\result.outcome === \"confirmed\") || (\\result.page === p)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Attempting to book a slot returns a result with the same slots as the original page. The outcome is 'duplicate' if and only if the key already holds at that index. The outcome is 'confirmed' if and only if the key does not hold and there is room. If the outcome is not 'confirmed', the page is unchanged."
+    },
+    {
+      "specId": "tryBookPreservesInv",
+      "function": "tryBookPreservesInv",
+      "requirement": "A booking attempt on a well-formed page never oversells — the resulting page is still well-formed for any outcome.",
+      "spec": {
+        "signature": "tryBookPreservesInv(p: Page, idx: number, bookingId: string, key: string, seq: number): boolean",
+        "requires": [
+          "wellFormed(p)"
+        ],
+        "ensures": [
+          "wellFormed(tryBook(p, idx, bookingId, key, seq).page)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If a page is well-formed before attempting to book, the resulting page remains well-formed after the booking attempt."
+    },
+    {
+      "specId": "cancelById",
+      "function": "cancelById",
+      "requirement": "A booking list of the same length as the input (the append-only log never shrinks).",
+      "spec": {
+        "signature": "cancelById(bs: Booking[], bookingId: string): Booking[]",
+        "requires": [],
+        "ensures": [
+          "\\result.length === bs.length"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Canceling a booking by ID returns a bookings array with the same length as the original array."
+    },
+    {
+      "specId": "cancelMonotone",
+      "function": "cancelMonotone",
+      "requirement": "Cancelling a booking never raises any slot's confirmed count.",
+      "spec": {
+        "signature": "cancelMonotone(bs: Booking[], bookingId: string, idx: number): boolean",
+        "requires": [],
+        "ensures": [
+          "confirmedCount(cancelById(bs, bookingId), idx) <= confirmedCount(bs, idx)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Canceling a booking by ID does not increase the confirmed count at any index; it can only decrease or maintain it."
+    },
+    {
+      "specId": "cancel",
+      "function": "cancel",
+      "requirement": "A well-formed page with the same slots; the cancellation itself is not part of the proven contract.",
+      "spec": {
+        "signature": "cancel(p: Page, bookingId: string): Page",
+        "requires": [
+          "wellFormed(p)"
+        ],
+        "ensures": [
+          "wellFormed(\\result)",
+          "\\result.slots === p.slots"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Canceling a booking by ID on a well-formed page results in a well-formed page with the same slots."
+    },
+    {
+      "specId": "remaining",
+      "function": "remaining",
+      "requirement": "The seats left at slot idx — it plus the confirmed count equal the capacity, and it is never negative.",
+      "spec": {
+        "signature": "remaining(p: Page, idx: number): number",
+        "requires": [
+          "wellFormed(p)",
+          "0 <= idx && idx < p.slots.length"
+        ],
+        "ensures": [
+          "\\result + confirmedCount(p.bookings, idx) === capacityAt(p.slots, idx)",
+          "\\result >= 0"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The remaining capacity at a given index equals the slot's capacity minus the confirmed count at that index, and is non-negative."
+    },
+    {
+      "specId": "allInRange",
+      "function": "allInRange",
+      "requirement": "Returns true only when every booking's slot index lies in the range [0, n) (the sound direction).",
+      "spec": {
+        "signature": "allInRange(bs: Booking[], n: number): boolean",
+        "requires": [],
+        "ensures": [
+          "\\result === true ==> forall(i, 0 <= i && i < bs.length ==> 0 <= bs[i].slotIdx && bs[i].slotIdx < n)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If the function returns true, then all bookings have slot indices within the range [0, n)."
+    },
+    {
+      "specId": "allInRangeSnoc",
+      "function": "allInRangeSnoc",
+      "requirement": "Appending an in-range booking keeps every booking's slot index in range.",
+      "spec": {
+        "signature": "allInRangeSnoc(bs: Booking[], b: Booking, n: number): boolean",
+        "requires": [
+          "allInRange(bs, n)",
+          "0 <= b.slotIdx && b.slotIdx < n"
+        ],
+        "ensures": [
+          "allInRange(bs.concat([b]), n)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If all bookings are in range [0, n) and a new booking with slot index in [0, n) is appended, then all bookings in the concatenated array are in range [0, n)."
+    },
+    {
+      "specId": "allInRangeCancel",
+      "function": "allInRangeCancel",
+      "requirement": "Cancelling a booking keeps every remaining booking's slot index in range.",
+      "spec": {
+        "signature": "allInRangeCancel(bs: Booking[], bookingId: string, n: number): boolean",
+        "requires": [
+          "allInRange(bs, n)"
+        ],
+        "ensures": [
+          "allInRange(cancelById(bs, bookingId), n)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If all bookings are in range [0, n), then after canceling a booking by ID, all remaining bookings are still in range [0, n)."
+    },
+    {
+      "specId": "allInRangeWiden",
+      "function": "allInRangeWiden",
+      "requirement": "If every booking's slot index is below n, it is also below any larger bound m.",
+      "spec": {
+        "signature": "allInRangeWiden(bs: Booking[], n: number, m: number): boolean",
+        "requires": [
+          "allInRange(bs, n)",
+          "n <= m"
+        ],
+        "ensures": [
+          "allInRange(bs, m)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If all bookings are in range [0, n) and n is less than or equal to m, then all bookings are also in range [0, m)."
+    },
+    {
+      "specId": "countZeroAtUnbooked",
+      "function": "countZeroAtUnbooked",
+      "requirement": "A slot index at or beyond the booked range has a confirmed count of zero — a freshly added slot starts empty.",
+      "spec": {
+        "signature": "countZeroAtUnbooked(bs: Booking[], n: number, idx: number): boolean",
+        "requires": [
+          "allInRange(bs, n)",
+          "idx >= n"
+        ],
+        "ensures": [
+          "confirmedCount(bs, idx) === 0"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If all bookings are in range [0, n) and the index is at or beyond n, then the confirmed count at that index is 0."
+    },
+    {
+      "specId": "initPage",
+      "function": "initPage",
+      "requirement": "A well-formed page with the given slots; that it starts empty is not part of the proven contract.",
+      "spec": {
+        "signature": "initPage(id: string, title: string, slots: Slot[]): Page",
+        "requires": [
+          "forall(j, 0 <= j && j < slots.length ==> slots[j].capacity >= 0)"
+        ],
+        "ensures": [
+          "wellFormed(\\result)",
+          "\\result.slots === slots"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Initializing a page with non-negative slot capacities results in a well-formed page with the specified slots."
+    },
+    {
+      "specId": "addSlot",
+      "function": "addSlot",
+      "requirement": "A well-formed page; the slot addition itself is not part of the proven contract.",
+      "spec": {
+        "signature": "addSlot(p: Page, label: string, newCap: number): Page",
+        "requires": [
+          "wellFormed(p)",
+          "newCap >= 0"
+        ],
+        "ensures": [
+          "wellFormed(\\result)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Adding a slot with non-negative capacity to a well-formed page results in a well-formed page."
+    },
+    {
+      "specId": "setCapAt",
+      "function": "setCapAt",
+      "requirement": "Sets slot idx's capacity to newCap, leaving every other slot unchanged.",
+      "spec": {
+        "signature": "setCapAt(slots: Slot[], idx: number, newCap: number): Slot[]",
+        "requires": [],
+        "ensures": [
+          "\\result.length === slots.length",
+          "forall(j, 0 <= j && j < slots.length && j !== idx ==> \\result[j] === slots[j])",
+          "(0 <= idx && idx < slots.length) ==> \\result[idx].capacity === newCap"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Setting the capacity at a given index produces an array with the same length, where the slot at the index has the new capacity and all other slots are unchanged."
+    },
+    {
+      "specId": "setCapacity",
+      "function": "setCapacity",
+      "requirement": "A well-formed page with the same number of slots; the capacity change itself is not part of the proven contract.",
+      "spec": {
+        "signature": "setCapacity(p: Page, idx: number, newCap: number): Page",
+        "requires": [
+          "wellFormed(p)",
+          "0 <= idx && idx < p.slots.length",
+          "newCap >= confirmedCount(p.bookings, idx)"
+        ],
+        "ensures": [
+          "wellFormed(\\result)",
+          "\\result.slots.length === p.slots.length"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Setting the capacity at a given index on a well-formed page to a value at least as large as the confirmed count results in a well-formed page with the same number of slots."
+    },
+    {
+      "specId": "closeSlot",
+      "function": "closeSlot",
+      "requirement": "A well-formed page; the slot closure itself is not part of the proven contract.",
+      "spec": {
+        "signature": "closeSlot(p: Page, idx: number): Page",
+        "requires": [
+          "wellFormed(p)",
+          "0 <= idx && idx < p.slots.length"
+        ],
+        "ensures": [
+          "wellFormed(\\result)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Closing a slot on a well-formed page results in a well-formed page."
+    },
+    {
+      "specId": "applyOp",
+      "function": "applyOp",
+      "requirement": "A page with the same slots; the op's effect on the bookings is not part of the proven contract.",
+      "spec": {
+        "signature": "applyOp(p: Page, op: Op): Page",
+        "requires": [],
+        "ensures": [
+          "\\result.slots === p.slots"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Applying an operation to a page results in a page with the same slots as the original."
+    },
+    {
+      "specId": "applyOpPreservesInv",
+      "function": "applyOpPreservesInv",
+      "requirement": "Applying any op to a well-formed page yields a well-formed page — no op log can produce an oversold page.",
+      "spec": {
+        "signature": "applyOpPreservesInv(p: Page, op: Op): boolean",
+        "requires": [
+          "wellFormed(p)"
+        ],
+        "ensures": [
+          "wellFormed(applyOp(p, op))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Applying an operation to a well-formed page results in a well-formed page."
+    },
+    {
+      "specId": "replayPreservesInv",
+      "function": "replayPreservesInv",
+      "requirement": "Replaying any op log over a well-formed page yields a well-formed page — every reachable state stays within capacity.",
+      "spec": {
+        "signature": "replayPreservesInv(p: Page, ops: Op[]): boolean",
+        "requires": [
+          "wellFormed(p)"
+        ],
+        "ensures": [
+          "wellFormed(replay(p, ops))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Replaying a sequence of operations on a well-formed page results in a well-formed page."
+    },
+    {
+      "specId": "confirmedCountConcat",
+      "function": "confirmedCountConcat",
+      "requirement": "The confirmed count over two concatenated booking lists equals the sum of their counts — additive over concatenation.",
+      "spec": {
+        "signature": "confirmedCountConcat(xs: Booking[], ys: Booking[], idx: number): boolean",
+        "requires": [],
+        "ensures": [
+          "confirmedCount(xs.concat(ys), idx) === confirmedCount(xs, idx) + confirmedCount(ys, idx)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The confirmed count at a given index in a concatenated bookings array equals the sum of the confirmed counts at that index in each of the two original arrays."
+    },
+    {
+      "specId": "confirmedCountComm",
+      "function": "confirmedCountComm",
+      "requirement": "A slot's confirmed count is the same whichever order two booking lists are concatenated.",
+      "spec": {
+        "signature": "confirmedCountComm(xs: Booking[], ys: Booking[], idx: number): boolean",
+        "requires": [],
+        "ensures": [
+          "confirmedCount(xs.concat(ys), idx) === confirmedCount(ys.concat(xs), idx)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The confirmed count at a given index is the same regardless of the order in which two bookings arrays are concatenated."
+    },
+    {
+      "specId": "confirmedBookers",
+      "function": "confirmedBookers",
+      "requirement": "A list whose length equals slot idx's confirmed count.",
+      "spec": {
+        "signature": "confirmedBookers(bs: Booking[], idx: number): Booking[]",
+        "requires": [],
+        "ensures": [
+          "\\result.length === confirmedCount(bs, idx)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The array of confirmed bookings at a given index has length equal to the confirmed count at that index."
+    },
+    {
+      "specId": "bookersOf",
+      "function": "bookersOf",
+      "requirement": "A list whose length equals slot idx's confirmed count on the page.",
+      "spec": {
+        "signature": "bookersOf(p: Page, idx: number): Booking[]",
+        "requires": [],
+        "ensures": [
+          "\\result.length === confirmedCount(p.bookings, idx)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The array of bookers at a given index has length equal to the confirmed count at that index."
+    },
+    {
+      "specId": "availableUpto",
+      "function": "availableUpto",
+      "requirement": "Marks, per slot, exactly which of the first k slots still have room.",
+      "spec": {
+        "signature": "availableUpto(p: Page, k: number): boolean[]",
+        "requires": [
+          "0 <= k && k <= p.slots.length"
+        ],
+        "ensures": [
+          "\\result.length === k",
+          "forall(j, 0 <= j && j < k ==> \\result[j] === hasRoom(p, j))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The availability array up to index k has length k, where each element indicates whether there is room at that index."
+    },
+    {
+      "specId": "availableSlots",
+      "function": "availableSlots",
+      "requirement": "Marks, per slot, exactly which slots still have room.",
+      "spec": {
+        "signature": "availableSlots(p: Page): boolean[]",
+        "requires": [],
+        "ensures": [
+          "\\result.length === p.slots.length",
+          "forall(j, 0 <= j && j < p.slots.length ==> \\result[j] === hasRoom(p, j))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The availability array has length equal to the number of slots, where each element indicates whether there is room at that index."
+    },
+    {
+      "specId": "noneAvailUpto",
+      "function": "noneAvailUpto",
+      "requirement": "True exactly when none of the first k slots has room.",
+      "spec": {
+        "signature": "noneAvailUpto(p: Page, k: number): boolean",
+        "requires": [
+          "0 <= k && k <= p.slots.length"
+        ],
+        "ensures": [
+          "\\result === forall(j, 0 <= j && j < k ==> !hasRoom(p, j))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The function returns true if and only if there is no room at any index from 0 to k (exclusive)."
+    },
+    {
+      "specId": "soldOut",
+      "function": "soldOut",
+      "requirement": "True exactly when no slot has any room left.",
+      "spec": {
+        "signature": "soldOut(p: Page): boolean",
+        "requires": [],
+        "ensures": [
+          "\\result === forall(j, 0 <= j && j < p.slots.length ==> !hasRoom(p, j))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The function returns true if and only if there is no room at any slot in the page."
+    },
+    {
+      "specId": "confirmedOnlyPreservesCount",
+      "function": "confirmedOnlyPreservesCount",
+      "requirement": "Dropping the cancelled bookings never changes any slot's confirmed count.",
+      "spec": {
+        "signature": "confirmedOnlyPreservesCount(bs: Booking[], idx: number): boolean",
+        "requires": [],
+        "ensures": [
+          "confirmedCount(confirmedOnly(bs), idx) === confirmedCount(bs, idx)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Filtering bookings to only confirmed ones does not change the confirmed count at any index."
+    },
+    {
+      "specId": "exportPage",
+      "function": "exportPage",
+      "requirement": "A page with the same slots; that only confirmed bookings are kept is not part of the proven contract.",
+      "spec": {
+        "signature": "exportPage(p: Page): Page",
+        "requires": [],
+        "ensures": [
+          "\\result.slots === p.slots"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "Exporting a page results in a page with the same slots as the original."
+    },
+    {
+      "specId": "availableSlotsOverExport",
+      "function": "availableSlotsOverExport",
+      "requirement": "Availability is identical over the exported page and the live page — a query over the export gives the same answer the booker saw.",
+      "spec": {
+        "signature": "availableSlotsOverExport(p: Page): boolean",
+        "requires": [],
+        "ensures": [
+          "availableSlots(exportPage(p)).length === p.slots.length",
+          "availableSlots(p).length === p.slots.length",
+          "forall(j, 0 <= j && j < p.slots.length ==> availableSlots(exportPage(p))[j] === availableSlots(p)[j])"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The availability arrays of the exported page and the original page have the same length and the same values at each index."
+    },
+    {
+      "specId": "keyHoldsSnoc",
+      "function": "keyHoldsSnoc",
+      "requirement": "Appending a booking adds exactly the (slot, key) it confirms to the \"already holds\" set, and nothing else.",
+      "spec": {
+        "signature": "keyHoldsSnoc(bs: Booking[], b: Booking, idx: number, key: string): boolean",
+        "requires": [],
+        "ensures": [
+          "keyHolds(bs.concat([b]), idx, key) === (keyHolds(bs, idx, key) || (b.status === \"confirmed\" && b.slotIdx === idx && b.key === key))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "A key holds at an index in a concatenated bookings array if it held in the original array or if the appended booking is confirmed at that index with that key."
+    },
+    {
+      "specId": "bookDelta",
+      "function": "bookDelta",
+      "requirement": "A single booking attempt raises slot s's count by one exactly when it is accepted (not a duplicate, has room) and targets s; otherwise it leaves the count unchanged.",
+      "spec": {
+        "signature": "bookDelta(p: Page, idx: number, bookingId: string, key: string, seq: number, s: number): boolean",
+        "requires": [],
+        "ensures": [
+          "confirmedCount(tryBook(p, idx, bookingId, key, seq).page.bookings, s) === confirmedCount(p.bookings, s) + ((!keyHolds(p.bookings, idx, key) && hasRoom(p, idx) && idx === s) ? 1 : 0)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "After attempting to book, the confirmed count at a given index increases by 1 if the booking succeeds at that index, and remains unchanged otherwise."
+    },
+    {
+      "specId": "keyHoldsAfterBook",
+      "function": "keyHoldsAfterBook",
+      "requirement": "After a booking attempt, the (slot, key) set gains (idx, key) exactly when the attempt was accepted there.",
+      "spec": {
+        "signature": "keyHoldsAfterBook(p: Page, idx: number, bookingId: string, key: string, seq: number, s: number, k: string): boolean",
+        "requires": [],
+        "ensures": [
+          "keyHolds(tryBook(p, idx, bookingId, key, seq).page.bookings, s, k) === (keyHolds(p.bookings, s, k) || (!keyHolds(p.bookings, idx, key) && hasRoom(p, idx) && idx === s && key === k))"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "A key holds at an index after attempting to book if it held before or if the booking succeeds at that index with that key."
+    },
+    {
+      "specId": "bookCountOrderInvariant",
+      "function": "bookCountOrderInvariant",
+      "requirement": "Two booking attempts applied in either order leave every slot's confirmed count identical — even when they contend for the same slot — so availability is order-independent.",
+      "spec": {
+        "signature": "bookCountOrderInvariant(p: Page, i1: number, id1: string, k1: string, q1: number, i2: number, id2: string, k2: string, q2: number, s: number): boolean",
+        "requires": [],
+        "ensures": [
+          "confirmedCount(tryBook(tryBook(p, i1, id1, k1, q1).page, i2, id2, k2, q2).page.bookings, s) === confirmedCount(tryBook(tryBook(p, i2, id2, k2, q2).page, i1, id1, k1, q1).page.bookings, s)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "The confirmed count at a given index is the same regardless of the order in which two bookings are attempted."
+    },
+    {
+      "specId": "confirmedCountPerm",
+      "function": "confirmedCountPerm",
+      "requirement": "Any permutation of the booking log leaves every slot's confirmed count unchanged.",
+      "spec": {
+        "signature": "confirmedCountPerm(xs: Booking[], ys: Booking[], idx: number): boolean",
+        "requires": [
+          "perm(xs, ys)"
+        ],
+        "ensures": [
+          "confirmedCount(xs, idx) === confirmedCount(ys, idx)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If two bookings arrays are permutations of each other, the confirmed count at any index is the same in both arrays."
+    },
+    {
+      "specId": "hasRoomPermInvariant",
+      "function": "hasRoomPermInvariant",
+      "requirement": "Two pages with the same slots whose booking logs are permutations of each other agree on whether each slot has room.",
+      "spec": {
+        "signature": "hasRoomPermInvariant(a: Page, b: Page, idx: number): boolean",
+        "requires": [
+          "a.slots === b.slots",
+          "perm(a.bookings, b.bookings)"
+        ],
+        "ensures": [
+          "hasRoom(a, idx) === hasRoom(b, idx)"
+        ]
+      },
+      "status": "confirmed",
+      "backTranslation": "If two pages have the same slots and their bookings are permutations of each other, then the availability at any index is the same in both pages."
+    }
+  ],
+  "gaps": []
+}
