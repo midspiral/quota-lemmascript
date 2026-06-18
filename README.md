@@ -1,5 +1,8 @@
 # Quota
 
+[![LemmaScript: verified](https://img.shields.io/badge/LemmaScript-verified-brightgreen)](https://github.com/midspiral/quota-lemmascript/actions/workflows/lemmascript.yml)
+
+
 A booking app where **providers** publish a special page of a limited number of **featured
 slots** and signed-in users grab them — with a **formally verified** core (no overbooking,
 honest accept/reject) in [LemmaScript](https://github.com/midspiral/LemmaScript), and an
