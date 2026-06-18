@@ -57,9 +57,30 @@ export default function App() {
     <div className="min-h-screen">
       <header className="border-b border-stone-200 bg-white/70 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-5 py-3">
-          <a href="#/" className="text-sm font-semibold tracking-tight text-stone-900">
-            Quota
-          </a>
+          <div className="flex items-center gap-3">
+            <a href="#/" className="text-sm font-semibold tracking-tight text-stone-900">
+              Quota
+            </a>
+            <span className="hidden text-xs text-stone-400 sm:inline">
+              verified with{" "}
+              <a
+                href="https://lemmascript.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-stone-500 underline-offset-2 hover:text-stone-800 hover:underline"
+              >
+                LemmaScript
+              </a>
+            </span>
+            <a
+              href="https://github.com/midspiral/quota-lemmascript"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden text-xs text-stone-400 hover:text-stone-700 sm:inline"
+            >
+              Source
+            </a>
+          </div>
           {session !== null && (
             <div className="flex items-center gap-3 text-sm">
               <a href="#/account" className="text-stone-500 hover:text-stone-800" title="Account settings">
