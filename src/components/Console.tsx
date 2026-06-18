@@ -13,7 +13,7 @@ export function Console({ session }: { session: Session }) {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Your pages</h1>
           <p className="mt-1 text-sm text-stone-500">
-            at <span className="font-mono text-stone-600">quota.app/{session.handle}/…</span>
+            at <span className="font-mono text-stone-600">quota.lemmascript.app/{session.handle}/…</span>
           </p>
         </div>
         <Button onClick={() => navigate("/new")}>New page</Button>

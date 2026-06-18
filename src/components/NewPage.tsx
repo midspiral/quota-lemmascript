@@ -65,7 +65,7 @@ export function NewPage({ session }: { session: Session }) {
             <Input value={title} onChange={(e) => onTitle(e.target.value)} placeholder="Yoga with Sam" autoFocus />
           </Field>
 
-          <Field label="Public URL" hint={`quota.app/${session.handle}/${slugify(effectiveSlug) || "…"}`}>
+          <Field label="Public URL" hint={`quota.lemmascript.app/${session.handle}/${slugify(effectiveSlug) || "…"}`}>
             <Input
               value={effectiveSlug}
               onChange={(e) => {

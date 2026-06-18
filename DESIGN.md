@@ -17,7 +17,7 @@ and, as it turns out, the opposite concurrency story (§3).
 - A signed-in **provider** picks a **username** (their public handle) and creates pages under
   it. Each page is a title and a handful of **featured slots**, each with a **capacity**
   (default **1** — an appointment; a class with N seats is just N sibling slots sharing a
-  label). Each page lives at a **vanity URL — `quota.app/username/pagename`** — branded and
+  label). Each page lives at a **vanity URL — `quota.lemmascript.app/username/pagename`** — branded and
   shareable by design (§6).
 - **No login for bookers.** Anyone opens the link and **grabs a slot** — and may grab **as
   many different slots as they like** on a page (book a morning *and* an afternoon). They get a
@@ -224,7 +224,7 @@ canonical order); `R2` holds immutable NDJSON exports. Export and query endpoint
 same verified functions server-side**, so their answers provably match the live app.
 
 **Addressing: vanity URLs `username/pagename`.** Unlike Quorum's unlisted random codes, Quota
-pages are **branded and meant to be shared** — `quota.app/{username}/{pagename}`. This needs a
+pages are **branded and meant to be shared** — `quota.lemmascript.app/{username}/{pagename}`. This needs a
 small **registry** (the only piece of global, cross-DO state):
 
 - **`username`** is globally unique (a provider's public handle); **`pagename`** is a slug
